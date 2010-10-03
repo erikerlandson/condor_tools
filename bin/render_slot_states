@@ -1,0 +1,231 @@
+#!/usr/bin/python
+
+
+import sys, os, os.path, string, glob, math
+import random
+import time, datetime
+import tempfile
+import subprocess
+
+
+def usage(a):
+    sys.stderr.write("usage: %s [options]\n")
+    sys.stderr.write("       [ -in <input-file> ] (def = stdin)\n")
+    sys.stderr.write("       [ -out <output-file> ] (def = stdout)\n")
+    sys.stderr.write("       [ -timeslice <secs-per-timeslice> (def = 10)\n")
+    sys.exit(1)
+
+
+argv = sys.argv
+argc = len(argv)
+
+fixedArgs = 0
+if argc <= fixedArgs: usage(argv[0])
+
+# fixed args
+
+# option defaults
+in_fname = None
+out_fname = None
+timeslice = 10
+
+# options
+try:
+    j = fixedArgs+1
+    while j<argc:
+        if sys.argv[j]=="-in":
+            j+=1
+            if j>=argc: usage(sys.argv[0])
+            in_fname = sys.argv[j]
+            j+=1
+            continue
+        if sys.argv[j]=="-out":
+            j+=1
+            if j>=argc: usage(sys.argv[0])
+            out_fname = sys.argv[j]
+            j+=1
+            continue
+        if sys.argv[j]=="-timeslice":
+            j+=1
+            if j>=argc: usage(sys.argv[0])
+            timeslice = int(sys.argv[j])
+            j+=1
+            continue
+        usage(argv[0])
+except SystemExit:
+    raise
+except:
+    usage(argv[0])
+
+
+def state_slotmap(in_file):
+    slotmap = {}
+    first = True
+    t0 = 0
+    tz = 0
+    for ln in in_file:
+        ln = ln.strip('\r\n')
+        t = ln.split()
+
+        # filter out lines we aren't interested in
+        if not ((t[2][:4] == 'slot') and (t[3] == 'Changing')): continue
+
+        #sys.stdout.write("t= %s\n" % (t))
+        
+        # parse time into seconds since Big Bang
+        tcur = int(time.mktime(time.strptime("%s %s" % (t[0], t[1]), "%m/%d/%y %H:%M:%S")))
+
+        # determine zero-time
+        if first: t0 = tcur
+
+        # translate time stamps to zero-based from t0
+        tcur -= t0
+
+        # maximum time stamp
+        if (tcur > tz): tz = tcur
+
+        slot = t[2].strip(':')
+        if not slotmap.has_key(slot): slotmap[slot] = [(0, 'X', 'X')]
+
+        (tx, curstate, curactiv) = slotmap[slot][-1]
+        if t[4] == 'state':
+            [newstate, newactiv] = t[9].split('/')
+        elif t[4] == 'state:':
+            newstate = t[7]
+            if newstate in ['Owner', 'Unclaimed', 'Matched']: newactiv = 'Idle'
+            else: newactiv = curactiv
+        else:
+            newstate = curstate
+            newactiv = t[7]
+        #sys.stdout.write("%s %s   ==>   %s %s\n" % (curstate, curactiv, newstate, newactiv))
+        slotmap[slot].append((tcur, newstate, newactiv))
+
+        first = False
+
+    return (slotmap, tz)
+
+
+def state_code(state, activ):
+    if state == 'X': return '.'
+    if activ == 'X': return '.'
+    if state == 'Owner': return 'o'
+    elif state == 'Unclaimed': return '-'
+    elif state == 'Matched': return 'm'
+    elif state == 'Preempting': return 'p'
+    elif state == 'Delete': return 'd'
+    elif state == 'Claimed':
+        if activ == 'Idle': return '+'
+        elif activ == 'Busy': return '*'
+        else:
+            sys.stderr.write("code(): unknown activity \"%s\"\n" % (activ)) 
+            return '!'
+    else:
+        sys.stderr.write("code(): unknown state \"%s\"\n" % (state)) 
+        return '!'
+
+
+def state_string(seq, tz, timeslice, ngmap):
+    sslen = 1 + tz / timeslice
+    ss = ['?'] * sslen
+    ssng = [[] for j in xrange(sslen)]
+
+    # seq[0] is always initializing placeholder
+    if len(seq) < 2: return "".join(ss)
+
+    # up to first occurrence gets '.'
+    (tcur, scur, acur) = seq[1]
+    js = 0
+    je = tcur / timeslice
+    c = '.'
+    for k in xrange(js, je):
+        ss[k] = c
+        ssng[k].append(c)
+
+    for j in xrange(2, len(seq)-1):
+        (tprv, sprv, aprv) = (tcur, scur, acur)
+        (tcur, scur, acur) = seq[j]
+        js = je
+        je = tcur / timeslice
+        c = state_code(sprv, aprv)
+        for k in xrange(js, 1+je):
+            ss[k] = c
+            ssng[k].append(c)
+
+    c = state_code(scur, acur)
+    for k in xrange(je, sslen):
+        ss[k] = c
+        ssng[k].append(c)
+
+    for k in xrange(0, sslen):
+        if len(ssng[k]) < 2: continue
+        ng = tuple(ssng[k])
+        if not ngmap.has_key(ng):
+            clist = ngmap[0]
+            ngmap[ng] = clist[0]
+            if len(clist) > 1: ngmap[0] = clist[1:]
+        ss[k] = ngmap[ng]
+
+    return "".join(ss)
+
+
+# table of ngram mappings.
+# special key int(0) holds the list of ngram codes we can use
+ngmap = {}
+ngmap[0] = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+
+# open files, if needed
+if in_fname == None: in_file = sys.stdin
+else: in_file = open(in_fname, "r")
+
+if out_fname == None: out_file = sys.stdout
+else: out_file = open(out_fname, "w")
+
+
+# read the input file and generate the state transition lists for each slot encountered
+(slotmap, tz) = state_slotmap(in_file)
+
+# sort the slot names into the output order we want
+def slot_ordering(a, b):
+    a2 = [int(x) for x in a[4:].split('_')]
+    b2 = [int(x) for x in b[4:].split('_')]
+    if a2[0] < b2[0]: return -1
+    if a2[0] > b2[0]: return 1
+    if len(a2) < len(b2): return -1
+    if len(a2) > len(b2): return 1
+    if len(a2) <= 1: return 0
+    if a2[1] < b2[1]: return -1
+    if a2[1] > b2[1]: return 1
+    return 0
+
+slotlist = slotmap.keys()
+slotlist.sort(slot_ordering)
+
+
+# generate the state transition strings
+# accumulate ngram mappings as we go
+odata = ["%15s %s\n" % (s, state_string(slotmap[s], tz, timeslice, ngmap)) for s in slotlist]
+
+
+# get rid of our ngram code list prior to output
+del ngmap[0]
+
+# create inverted mapping, code->ngram
+ngmapi = {}
+for k in ngmap.keys():
+    ki = ngmap[k]
+    if not ngmapi.has_key(ki): ngmapi[ki] = []
+    ngmapi[ki].append(k)
+
+for k in ngmapi.keys():
+    if len(ngmapi[k]) < 2: ngmapi[k] = ngmapi[k][0]
+
+
+# output the table of ngram mappings
+ngk = ngmapi.keys()
+ngk.sort()
+for k in ngk: out_file.write("%s => %s\n" % (k, ngmapi[k]))
+out_file.write("\n\n")
+
+# now output the state transition strings
+for s in odata: out_file.write(s)
