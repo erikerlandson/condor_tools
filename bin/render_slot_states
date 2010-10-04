@@ -58,6 +58,24 @@ except:
     usage(argv[0])
 
 
+# initialize the state/activity code lookup table
+state_code_map = {}
+state_code_map[('Owner', 'Idle')] = 'o'
+state_code_map[('Unclaimed', 'Idle')] = '-'
+state_code_map[('Unclaimed', 'Benchmarking')] = 'b'
+state_code_map[('Matched', 'Idle')] = 'm'
+state_code_map[('Claimed', 'Idle')] = '+'
+state_code_map[('Claimed', 'Busy')] = '*'
+state_code_map[('Claimed', 'Retiring')] = 'r'
+state_code_map[('Claimed', 'Suspended')] = 's'
+state_code_map[('Preempting', 'Vacating')] = 'v'
+state_code_map[('Preempting', 'Killing')] = 'k'
+state_code_map[('Backfill', 'Idle')] = 'x'
+state_code_map[('Backfill', 'Busy')] = 'y'
+state_code_map[('Backfill', 'Killing')] = 'z'
+state_code_map[('Delete', 'Idle')] = 'd'
+
+
 def state_slotmap(in_file):
     slotmap = {}
     first = True
@@ -91,13 +109,18 @@ def state_slotmap(in_file):
         if t[4] == 'state':
             [newstate, newactiv] = t[9].split('/')
         elif t[4] == 'state:':
+            pstate = t[5]
             newstate = t[7]
-            if newstate in ['Owner', 'Unclaimed', 'Matched']: newactiv = 'Idle'
+            if (curactiv == 'X'):
+                if (newstate in ['Owner', 'Unclaimed', 'Matched']): newactiv = 'Idle'
+                elif (pstate == 'Owner') and (newstate == 'Claimed'): newactiv = 'Idle'
+                else: newactiv = curactiv
             else: newactiv = curactiv
         else:
             newstate = curstate
             newactiv = t[7]
-        #sys.stdout.write("%s %s   ==>   %s %s\n" % (curstate, curactiv, newstate, newactiv))
+        if (newstate == 'X') or (newactiv == 'X'):
+            sys.stdout.write("incomplete state/activity: %s\n" % tuple([(slot, tcur, newstate, newactiv)]))
         slotmap[slot].append((tcur, newstate, newactiv))
 
         first = False
@@ -106,22 +129,20 @@ def state_slotmap(in_file):
 
 
 def state_code(state, activ):
-    if state == 'X': return '.'
-    if activ == 'X': return '.'
-    if state == 'Owner': return 'o'
-    elif state == 'Unclaimed': return '-'
-    elif state == 'Matched': return 'm'
-    elif state == 'Preempting': return 'p'
-    elif state == 'Delete': return 'd'
-    elif state == 'Claimed':
-        if activ == 'Idle': return '+'
-        elif activ == 'Busy': return '*'
-        else:
-            sys.stderr.write("code(): unknown activity \"%s\"\n" % (activ)) 
-            return '!'
-    else:
-        sys.stderr.write("code(): unknown state \"%s\"\n" % (state)) 
+    global state_code_map
+
+    # these cases indicate state/activity pair hasn't been fully
+    # initialized from log data yet
+    if (state == 'X') and (activ == 'X'): return '^'
+    if state == 'X': return '"'
+    if activ == 'X': return "'"
+
+    # otherwise, we expect to have our state/activity pair defined in lookup table
+    k = (state, activ)
+    if not state_code_map.has_key(k):
+        sys.stderr.write("state_code(): unknown state/activity %s\n" % (k))
         return '!'
+    return state_code_map[k]
 
 
 def state_string(seq, tz, timeslice, ngmap):
