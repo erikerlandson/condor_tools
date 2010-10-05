@@ -74,6 +74,12 @@ state_code_map[('Backfill', 'Idle')] = 'x'
 state_code_map[('Backfill', 'Busy')] = 'y'
 state_code_map[('Backfill', 'Killing')] = 'z'
 state_code_map[('Delete', 'Idle')] = 'd'
+state_code_map[('_Vacating_', '')] = '>'
+
+# table of ngram mappings.
+# special key int(0) holds the list of ngram codes we can use
+ngmap = {}
+ngmap[0] = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 
 
 def state_slotmap(in_file):
@@ -145,13 +151,28 @@ def state_code(state, activ):
     return state_code_map[k]
 
 
-def state_string(seq, tz, timeslice, ngmap):
+def state_string(seq_in, tz, timeslice, ngmap):
     sslen = 1 + tz / timeslice
     ss = ['?'] * sslen
     ssng = [[] for j in xrange(sslen)]
 
+    # work with a copy -- I may munge it
+    seq = seq_in[:]
+
     # seq[0] is always initializing placeholder
     if len(seq) < 2: return "".join(ss)
+
+    # replace certain common state subsequences with virtual state to simplify
+    # and reduce occurrence of special n-grams below
+    # This one is the 'vacating' pattern:
+    j = 0
+    while j < (len(seq) - 1):
+        (t0, s0, a0) = seq[j]
+        (t,  s1, a1) = seq[j+1]
+        if (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o'):
+            seq[j] = (t0, '_Vacating_', '')
+            del seq[j+1]
+        j += 1
 
     # up to first occurrence gets '.'
     (tcur, scur, acur) = seq[1]
@@ -162,6 +183,7 @@ def state_string(seq, tz, timeslice, ngmap):
         ss[k] = c
         ssng[k].append(c)
 
+    # fill from each state to beginning of next state
     for j in xrange(2, len(seq)-1):
         (tprv, sprv, aprv) = (tcur, scur, acur)
         (tcur, scur, acur) = seq[j]
@@ -172,11 +194,23 @@ def state_string(seq, tz, timeslice, ngmap):
             ss[k] = c
             ssng[k].append(c)
 
+    # fill to end with last known state
     c = state_code(scur, acur)
     for k in xrange(je, sslen):
         ss[k] = c
         ssng[k].append(c)
 
+    # trim the 1st and/or last state off of ngrams, when we can do it
+    # without losing state transition info from the code sequence.  This
+    # reduces special ngrams, makes plots more clear
+    for k in xrange(0, sslen):
+        if (len(ssng[k]) == 1): continue
+        if (len(ssng[k]) > 1) and (k > 0) and (len(ssng[k-1])==1) and (ssng[k][0] == ssng[k-1][0]): del ssng[k][0]
+        if (len(ssng[k]) > 1) and (k < sslen-1) and (len(ssng[k+1]) == 1) and (ssng[k][-1] == ssng[k+1][0]): del ssng[k][-1]
+        # if we trimmed down to a single code, make sure we put that code back into ss
+        if (len(ssng[k]) == 1): ss[k] = ssng[k][0]
+
+    # determine state ngrams for special mappings
     for k in xrange(0, sslen):
         if len(ssng[k]) < 2: continue
         ng = tuple(ssng[k])
@@ -188,11 +222,6 @@ def state_string(seq, tz, timeslice, ngmap):
 
     return "".join(ss)
 
-
-# table of ngram mappings.
-# special key int(0) holds the list of ngram codes we can use
-ngmap = {}
-ngmap[0] = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 
 
 # open files, if needed
@@ -245,6 +274,7 @@ for k in ngmapi.keys():
 # output the table of ngram mappings
 ngk = ngmapi.keys()
 ngk.sort()
+out_file.write("List of %d timeslot collision ngram mappings:\n" % (len(ngk)))
 for k in ngk: out_file.write("%s => %s\n" % (k, ngmapi[k]))
 out_file.write("\n\n")
 
