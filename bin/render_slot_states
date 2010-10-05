@@ -77,6 +77,8 @@ state_code_map[('Delete', 'Idle')] = '_'
 # "virtual states" collapse specific patterns of real condor slot states:
 state_code_map[('_DS_Vacating_', '')] = '\\'
 state_code_map[('_NS_Vacating_', '')] = '>'
+state_code_map[('_DS_Ramping_', '')] = '/'
+state_code_map[('_NS_Ramping_', '')] = '<'
 
 # table of ngram mappings.
 # special key int(0) holds the list of ngram codes we can use
@@ -183,6 +185,12 @@ def state_string(seq_in, tz, timeslice, ngmap):
         elif (j < (len(seq)-2)) and (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o') and (state_code(s2,a2)=='-'):
             seq[j] = (t0, '_NS_Vacating_', '')
             del seq[j+1:j+2]
+        elif (j < (len(seq)-2)) and (state_code(s0,a0)=='m') and (state_code(s1,a1)=='+') and (state_code(s2,a2)=='*'):
+            seq[j] = (t0, '_NS_Ramping_', '')
+            del seq[j+1:j+2]
+        elif (j < (len(seq)-1)) and (state_code(s0,a0)=='+') and (state_code(s1,a1)=='*'):
+            seq[j] = (t0, '_DS_Ramping_', '')
+            #del seq[j+1:j+2]
         j += 1
 
     # up to first occurrence gets '.'
