@@ -184,7 +184,7 @@ def state_string(seq_in, tz, timeslice, ngmap):
         ssng[k].append(c)
 
     # fill from each state to beginning of next state
-    for j in xrange(2, len(seq)-1):
+    for j in xrange(2, len(seq)):
         (tprv, sprv, aprv) = (tcur, scur, acur)
         (tcur, scur, acur) = seq[j]
         js = je
