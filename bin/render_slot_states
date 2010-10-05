@@ -73,8 +73,10 @@ state_code_map[('Preempting', 'Killing')] = 'k'
 state_code_map[('Backfill', 'Idle')] = 'x'
 state_code_map[('Backfill', 'Busy')] = 'y'
 state_code_map[('Backfill', 'Killing')] = 'z'
-state_code_map[('Delete', 'Idle')] = 'd'
-state_code_map[('_Vacating_', '')] = '>'
+state_code_map[('Delete', 'Idle')] = '_'
+# "virtual states" collapse specific patterns of real condor slot states:
+state_code_map[('_DS_Vacating_', '')] = '\\'
+state_code_map[('_NS_Vacating_', '')] = '>'
 
 # table of ngram mappings.
 # special key int(0) holds the list of ngram codes we can use
@@ -94,8 +96,6 @@ def state_slotmap(in_file):
         # filter out lines we aren't interested in
         if not ((t[2][:4] == 'slot') and (t[3] == 'Changing')): continue
 
-        #sys.stdout.write("t= %s\n" % (t))
-        
         # parse time into seconds since Big Bang
         tcur = int(time.mktime(time.strptime("%s %s" % (t[0], t[1]), "%m/%d/%y %H:%M:%S")))
 
@@ -134,21 +134,23 @@ def state_slotmap(in_file):
     return (slotmap, tz)
 
 
+
 def state_code(state, activ):
     global state_code_map
 
     # these cases indicate state/activity pair hasn't been fully
     # initialized from log data yet
-    if (state == 'X') and (activ == 'X'): return '^'
-    if state == 'X': return '"'
-    if activ == 'X': return "'"
+    # we output a warning message about this elsewhere
+    if (state == 'X') or (activ == 'X'): return '#'
 
     # otherwise, we expect to have our state/activity pair defined in lookup table
     k = (state, activ)
     if not state_code_map.has_key(k):
         sys.stderr.write("state_code(): unknown state/activity %s\n" % (k))
         return '!'
+
     return state_code_map[k]
+
 
 
 def state_string(seq_in, tz, timeslice, ngmap):
@@ -170,21 +172,23 @@ def state_string(seq_in, tz, timeslice, ngmap):
     # and reduce occurrence of special n-grams below
     # This one is the 'vacating' pattern for dynamic slots:
     j = 0
-    while j < (len(seq) - 3):
+    while j < len(seq):
         (t0, s0, a0) = seq[j]
-        (t,  s1, a1) = seq[j+1]
-        (t,  s2, a2) = seq[j+2]
-        (t,  s3, a3) = seq[j+3]
-        # vacating sequence for dynamic slot ends with 'd' (Delete) -- match the 'd' but also keep it.
-        if (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o') and (state_code(s2,a2)=='-') and (state_code(s3,a3)=='d'):
-            seq[j] = (t0, '_Vacating_', '')
+        if j < (len(seq)-1): (t, s1, a1) = seq[j+1]
+        if j < (len(seq)-2): (t, s2, a2) = seq[j+2]
+        if j < (len(seq)-3): (t, s3, a3) = seq[j+3]
+        if (j < (len(seq)-3)) and (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o') and (state_code(s2,a2)=='-') and (state_code(s3,a3)=='_'):
+            seq[j] = (t0, '_DS_Vacating_', '')
             del seq[j+1:j+3]
+        elif (j < (len(seq)-2)) and (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o') and (state_code(s2,a2)=='-'):
+            seq[j] = (t0, '_NS_Vacating_', '')
+            del seq[j+1:j+2]
         j += 1
 
     # up to first occurrence gets '.'
     (tcur, scur, acur) = seq[1]
     js = 0
-    je = tcur / timeslice
+    je =  (tcur/timeslice)
     c = '.'
     for k in xrange(js, je):
         ss[k] = c
@@ -195,7 +199,7 @@ def state_string(seq_in, tz, timeslice, ngmap):
         (tprv, sprv, aprv) = (tcur, scur, acur)
         (tcur, scur, acur) = seq[j]
         js = je
-        je = tcur / timeslice
+        je = (tcur/timeslice)
         c = state_code(sprv, aprv)
         for k in xrange(js, 1+je):
             ss[k] = c
@@ -283,7 +287,7 @@ ngk = ngmapi.keys()
 ngk.sort()
 out_file.write("List of %d timeslot collision ngram mappings:\n" % (len(ngk)))
 for k in ngk: out_file.write("%s => %s\n" % (k, ngmapi[k]))
-out_file.write("\n\n")
+out_file.write("\n")
 
 # now output the state transition strings
 for s in odata: out_file.write(s)
