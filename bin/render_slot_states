@@ -152,7 +152,11 @@ def state_code(state, activ):
 
 
 def state_string(seq_in, tz, timeslice, ngmap):
-    sslen = 1 + tz / timeslice
+    # add in an extra slice at end -- eliminates collision ngram
+    # mappings caused by the end boundary
+    sslen = 2 + tz / timeslice
+
+    # initialize state string list and parallel state string collision ngram list
     ss = ['?'] * sslen
     ssng = [[] for j in xrange(sslen)]
 
@@ -164,14 +168,17 @@ def state_string(seq_in, tz, timeslice, ngmap):
 
     # replace certain common state subsequences with virtual state to simplify
     # and reduce occurrence of special n-grams below
-    # This one is the 'vacating' pattern:
+    # This one is the 'vacating' pattern for dynamic slots:
     j = 0
-    while j < (len(seq) - 1):
+    while j < (len(seq) - 3):
         (t0, s0, a0) = seq[j]
         (t,  s1, a1) = seq[j+1]
-        if (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o'):
+        (t,  s2, a2) = seq[j+2]
+        (t,  s3, a3) = seq[j+3]
+        # vacating sequence for dynamic slot ends with 'd' (Delete) -- match the 'd' but also keep it.
+        if (state_code(s0,a0)=='v') and (state_code(s1,a1)=='o') and (state_code(s2,a2)=='-') and (state_code(s3,a3)=='d'):
             seq[j] = (t0, '_Vacating_', '')
-            del seq[j+1]
+            del seq[j+1:j+3]
         j += 1
 
     # up to first occurrence gets '.'
