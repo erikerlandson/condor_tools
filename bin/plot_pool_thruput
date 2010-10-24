@@ -14,7 +14,11 @@ def usage(a):
     sys.stderr.write("usage: %s [options]\n")
     sys.stderr.write("       [ -in <input-file> ] (def = stdin)\n")
     sys.stderr.write("       [ -out <output-file> ] (def = stdout)\n")
-    sys.stderr.write("       [ -cum-groups ] (def = use full submitter names)\n") 
+    sys.stderr.write("       [ -groups ] (plot by accounting groups)\n")
+    sys.stderr.write("       [ -submitters ] (plot by full submitter names)\n")
+    sys.stderr.write("       [ -cum ] (cumulative plots)\n")
+    sys.stderr.write("       [ -ratios ] (plot ratios relative to total values)\n")
+    sys.stderr.write("       [ -timeslice <time-res> ] (default = 1 sec)\n")
     sys.exit(1)
 
 argv = sys.argv
@@ -28,7 +32,11 @@ if argc <= fixedArgs: usage(argv[0])
 # option defaults
 in_fname = None
 out_fname = None
-cum_groups = False
+by_groups = False
+by_submitters = False
+cum_plots = False
+ratio_plots = False
+timeslice = 1
 
 # options
 try:
@@ -47,8 +55,26 @@ try:
             out_fname = sys.argv[j]
             j+=1
             continue
-        if sys.argv[j]=="-cum-groups":
-            cum_groups = True
+        if sys.argv[j]=="-groups":
+            by_groups = True
+            j+=1
+            continue
+        if sys.argv[j]=="-submitters":
+            by_submitters = True
+            j+=1
+            continue
+        if sys.argv[j]=="-cum":
+            cum_plots = True
+            j+=1
+            continue
+        if sys.argv[j]=="-ratios":
+            ratio_plots = True
+            j+=1
+            continue
+        if sys.argv[j]=="-timeslice":
+            j+=1
+            if j>=argc: usage(sys.argv[0])
+            timeslice = int(sys.argv[j])
             j+=1
             continue
         usage(argv[0])
@@ -58,13 +84,12 @@ except:
     usage(argv[0])
 
 
-def fill_cum_map(in_file, cum_groups=False):
+def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, timeslice=1):
     cum_map = {}
     cum_map[""] = []
     first = True
     t0 = 0
-    tz = 0
-    cur_ag = None
+    cur_ag = ""
     for ln in in_file:
         ln = ln.strip('\r\n')
         t = ln.split()
@@ -72,9 +97,9 @@ def fill_cum_map(in_file, cum_groups=False):
         if (len(t) < 1): continue
 
         # keep track of most recent accounting group mentioned
-        if ((t[0] == "AccountingGroup") and (len(t) == 3)):
+        if (by_groups or by_submitters) and ((t[0] == "AccountingGroup") and (len(t) == 3)):
             cur_ag = t[2].strip('"')
-            if cum_groups:
+            if by_groups:
                 j = cur_ag.rfind('.')
                 if (j>=0): cur_ag = cur_ag[:j]
             continue
@@ -92,9 +117,10 @@ def fill_cum_map(in_file, cum_groups=False):
 
         # translate time stamps to zero-based from t0
         tcur -= t0
+        tcur /= timeslice
 
         # encountered a new acct grp -- fill in its previous time stamps
-        if not cum_map.has_key(cur_ag):
+        if (by_groups or by_submitters) and (not cum_map.has_key(cur_ag)):
             cum_map[cur_ag] = [[x[0], 0] for x in cum_map[""]]
 
         for ag in cum_map.keys():
@@ -106,16 +132,19 @@ def fill_cum_map(in_file, cum_groups=False):
                 cum_map[ag].append([tcur, d])
 
     # get cum counts
-    for ag in cum_map.keys():
-        for j in xrange(1, len(cum_map[ag])):
-            cum_map[ag][j][1] += cum_map[ag][j-1][1]
+    if cum_plots:
+        for ag in cum_map.keys():
+            for j in xrange(1, len(cum_map[ag])):
+                cum_map[ag][j][1] += cum_map[ag][j-1][1]
 
     # normalize
-    for j in xrange(0, len(cum_map[""])):
-        for ag in cum_map.keys():
-            if ag != "": cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[""][j][1])
+    if ratio_plots:
+        for j in xrange(0, len(cum_map[""])):
+            for ag in cum_map.keys():
+                if ag != "": cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[""][j][1])
 
-    # don't need this anymore
+    if not (by_groups or by_submitters):
+        cum_map["total"] = cum_map[""]
     del cum_map[""]
 
     return cum_map
@@ -129,17 +158,28 @@ if out_fname == None: out_file = sys.stdout
 else: out_file = open(out_fname, "w")
 
 # read the input history file and generate map of cumulative acct grp ratios
-cum_map = fill_cum_map(in_file, cum_groups = cum_groups)
+cum_map = fill_cum_map(in_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, timeslice=timeslice)
 
 keys = cum_map.keys()
 keys.sort()
+
+xlab = "Time (sec)"
+ylab = "thruput"
+title = "thruput"
+if cum_plots:
+    ylab = "Cumulative " + ylab
+    title = "Cumulative " + title
+if ratio_plots:
+    ylab = ylab + " ratios"
+    title = title + " ratios"
+title = title + " vs Time"
 
 fig = pyplot.figure()
 ax = fig.add_subplot(111)
 for k in keys:
     plt = ax.plot([x[0] for x in cum_map[k]], [x[1] for x in cum_map[k]])
-ax.set_xlabel("Time (sec)")
-ax.set_ylabel("Cum fractional share")
-ax.set_title("Cumulative fractional share as function of time")
+ax.set_xlabel(xlab)
+ax.set_ylabel(ylab)
+ax.set_title(title)
 ax.legend(keys)
 pyplot.show()
