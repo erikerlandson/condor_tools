@@ -90,7 +90,10 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
     first = True
     t0 = 0
     cur_ag = ""
+    line_num = 0
     for ln in in_file:
+        line_num += 1
+        raw_ln = ln
         ln = ln.strip('\r\n')
         t = ln.split()
 
@@ -116,6 +119,11 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
             first = False
 
         # translate time stamps to zero-based from t0
+        if tcur < t0:
+            sys.stderr.write("Warning: skipping out-of-order timestamp line %d of input:\n" % (line_num))
+            sys.stderr.write("%s\n" % (raw_ln))
+            continue
+
         tcur -= t0
         tcur /= timeslice
 
