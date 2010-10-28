@@ -12,7 +12,7 @@ import numpy
 
 def usage(a):
     sys.stderr.write("usage: %s [options]\n")
-    sys.stderr.write("       [ -in <input-file> ] (def = stdin)\n")
+    sys.stderr.write("       [ -in <input-file> ] (def = active condor history)\n")
     sys.stderr.write("       [ -out <output-file> ] (def = stdout)\n")
     sys.stderr.write("       [ -groups ] (plot by accounting groups)\n")
     sys.stderr.write("       [ -submitters ] (plot by full submitter names)\n")
@@ -97,21 +97,17 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         ln = ln.strip('\r\n')
         t = ln.split()
 
-        if (len(t) < 1): continue
+        if (len(t) < 2): continue
 
         # keep track of most recent accounting group mentioned
-        if (by_groups or by_submitters) and ((t[0] == "AccountingGroup") and (len(t) == 3)):
-            cur_ag = t[2].strip('"')
+        if (by_groups or by_submitters):
+            cur_ag = t[1].strip('"')
             if by_groups:
                 j = cur_ag.rfind('.')
                 if (j>=0): cur_ag = cur_ag[:j]
-            continue
-
-        # filter out lines we aren't interested in
-        if not ((t[0] == "***") and (len(t) == 16) and (t[13] == "CompletionDate")): continue
 
         # time
-        tcur = int(t[15])
+        tcur = int(t[0])
 
         # determine zero-time
         if first:
@@ -158,15 +154,26 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
     return cum_map
 
 
-# open files, if needed
-if in_fname == None: in_file = sys.stdin
-else: in_file = open(in_fname, "r")
-
 if out_fname == None: out_file = sys.stdout
 else: out_file = open(out_fname, "w")
 
-# read the input history file and generate map of cumulative acct grp ratios
-cum_map = fill_cum_map(in_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, timeslice=timeslice)
+# temp file for condor_history output
+ho_fname = tempfile.mktemp(prefix="ppt_")
+ho_file = open(ho_fname, "w")
+
+# construct condor_history command
+chc = ["condor_history"]
+if in_fname != None: chc.extend(["-f", in_fname])
+chc.extend(["-format", '%s', 'CompletionDate'])
+chc.extend(["-format", ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
+
+# invoke condor_history to generate our desired output
+subprocess.call(chc, stdout=ho_file)
+ho_file.close()
+
+# read the output of condor_history command and generate map of cumulative acct grp ratios
+ho_file = open(ho_fname, "r")
+cum_map = fill_cum_map(ho_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, timeslice=timeslice)
 
 keys = cum_map.keys()
 keys.sort()
