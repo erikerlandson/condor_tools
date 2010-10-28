@@ -19,6 +19,8 @@ def usage(a):
     sys.stderr.write("       [ -cum ] (cumulative plots)\n")
     sys.stderr.write("       [ -ratios ] (plot ratios relative to total values)\n")
     sys.stderr.write("       [ -timeslice <time-res> ] (default = 1 sec)\n")
+    sys.stderr.write("       [ -ignore <cat1> [ <cat2> ...]] (ignore data from categories)\n")
+    sys.stderr.write("       [ -only <cat1> [ <cat2> ...]] (consider only data from categories)\n")
     sys.exit(1)
 
 argv = sys.argv
@@ -37,6 +39,8 @@ by_submitters = False
 cum_plots = False
 ratio_plots = False
 timeslice = 1
+ignore = []
+only = []
 
 # options
 try:
@@ -77,6 +81,24 @@ try:
             timeslice = int(sys.argv[j])
             j+=1
             continue
+        if sys.argv[j]=="-ignore":
+            j+=1
+            opargs = 0
+            while (j < argc) and (sys.argv[j][:1] != '-'):
+                ignore.append(sys.argv[j])
+                j += 1
+                opargs += 1
+            if opargs < 1: usage(sys.argv[0])
+            continue
+        if sys.argv[j]=="-only":
+            j+=1
+            opargs = 0
+            while (j < argc) and (sys.argv[j][:1] != '-'):
+                only.append(sys.argv[j])
+                j += 1
+                opargs += 1
+            if opargs < 1: usage(sys.argv[0])
+            continue
         usage(argv[0])
 except SystemExit:
     raise
@@ -84,7 +106,7 @@ except:
     usage(argv[0])
 
 
-def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, timeslice=1):
+def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, timeslice=1, ignore=[], only=[]):
     cum_map = {}
     cum_map[""] = []
     first = True
@@ -110,6 +132,9 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
             if by_groups:
                 j = cur_ag.rfind('.')
                 if (j>=0): cur_ag = cur_ag[:j]
+
+        if (len(only)>0) and not (cur_ag in only): continue
+        elif (len(ignore)>0) and (cur_ag in ignore): continue
 
         # time
         if jstat == 4: tcur = int(t[0])
@@ -181,7 +206,7 @@ ho_file.close()
 
 # read the output of condor_history command and generate map of cumulative acct grp ratios
 ho_file = open(ho_fname, "r")
-cum_map = fill_cum_map(ho_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, timeslice=timeslice)
+cum_map = fill_cum_map(ho_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, timeslice=timeslice, ignore=ignore, only=only)
 
 keys = cum_map.keys()
 keys.sort()
