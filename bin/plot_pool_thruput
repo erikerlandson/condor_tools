@@ -97,29 +97,35 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         ln = ln.strip('\r\n')
         t = ln.split()
 
-        if (len(t) < 2): continue
+        if (len(t) < 4): continue
+
+        # job status
+        jstat = int(t[2])
 
         # keep track of most recent accounting group mentioned
-        if (by_groups or by_submitters):
-            cur_ag = t[1].strip('"')
+        if jstat != 4:
+            cur_ag = '*incomplete*'
+        elif (by_groups or by_submitters):
+            cur_ag = t[3].strip('"')
             if by_groups:
                 j = cur_ag.rfind('.')
                 if (j>=0): cur_ag = cur_ag[:j]
 
         # time
-        tcur = int(t[0])
+        if jstat == 4: tcur = int(t[0])
+        else:          tcur = int(t[1])
 
         # determine zero-time
         if first:
             t0 = tcur
             first = False
 
-        # translate time stamps to zero-based from t0
         if tcur < t0:
             sys.stderr.write("Warning: skipping out-of-order timestamp line %d of input:\n" % (line_num))
             sys.stderr.write("%s\n" % (raw_ln))
             continue
 
+        # translate time stamps to zero-based from t0
         tcur -= t0
         tcur /= timeslice
 
@@ -148,7 +154,7 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
                 if ag != "": cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[""][j][1])
 
     if not (by_groups or by_submitters):
-        cum_map["total"] = cum_map[""]
+        cum_map["*total*"] = cum_map[""]
     del cum_map[""]
 
     return cum_map
@@ -162,10 +168,12 @@ ho_fname = tempfile.mktemp(prefix="ppt_")
 ho_file = open(ho_fname, "w")
 
 # construct condor_history command
-chc = ["condor_history"]
-if in_fname != None: chc.extend(["-f", in_fname])
-chc.extend(["-format", '%s', 'CompletionDate'])
-chc.extend(["-format", ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
+chc = ['condor_history']
+if in_fname != None: chc.extend(['-f', in_fname])
+chc.extend(['-format', '%s', 'CompletionDate'])
+chc.extend(['-format', ' %s', 'EnteredCurrentStatus'])
+chc.extend(['-format', ' %s', 'JobStatus'])
+chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
 
 # invoke condor_history to generate our desired output
 subprocess.call(chc, stdout=ho_file)
