@@ -12,15 +12,18 @@ import numpy
 
 def usage(a):
     sys.stderr.write("usage: %s [options]\n")
-    sys.stderr.write("       [ -in <input-file> ] (def = active condor history)\n")
-    sys.stderr.write("       [ -out <output-file> ] (def = stdout)\n")
-    sys.stderr.write("       [ -groups ] (plot by accounting groups)\n")
-    sys.stderr.write("       [ -submitters ] (plot by full submitter names)\n")
+    sys.stderr.write("       [ -f <history-file> ] (def = active condor history file)\n")
+    sys.stderr.write("       [ -by <expr> ] (categories by value of <expr>)\n")
+    sys.stderr.write("       [ -by-group ] (categories by accounting groups)\n")
+    sys.stderr.write("       [ -by-submitter ] (categories by full submitter names)\n")
     sys.stderr.write("       [ -cum ] (cumulative plots)\n")
     sys.stderr.write("       [ -ratios ] (plot ratios relative to total values)\n")
     sys.stderr.write("       [ -timeslice <time-res> ] (default = 1 sec)\n")
     sys.stderr.write("       [ -ignore <cat1> [ <cat2> ...]] (ignore data from categories)\n")
     sys.stderr.write("       [ -only <cat1> [ <cat2> ...]] (consider only data from categories)\n")
+    sys.stderr.write("       [ -with-total ] (include total in plot)\n")
+    sys.stderr.write("       [ -only-total ] (show only the total in plot)\n")
+    sys.stderr.write("       [ -constraint <expr> ] (constrain output of condor_history with constraint-expr)\n")
     sys.exit(1)
 
 argv = sys.argv
@@ -33,7 +36,7 @@ if argc <= fixedArgs: usage(argv[0])
 
 # option defaults
 in_fname = None
-out_fname = None
+by_expr = None
 by_groups = False
 by_submitters = False
 cum_plots = False
@@ -41,34 +44,51 @@ ratio_plots = False
 timeslice = 1
 ignore = []
 only = []
+with_total = False
+only_total = False
+constraint = None
 
 # options
 try:
     j = fixedArgs+1
     while j<argc:
         if sys.argv[j]=="-h": usage()
-        if sys.argv[j]=="-in":
+        if sys.argv[j]=="-f":
             j+=1
             if j>=argc: usage(sys.argv[0])
             in_fname = sys.argv[j]
             j+=1
             continue
-        if sys.argv[j]=="-out":
+        if sys.argv[j]=="-by":
             j+=1
             if j>=argc: usage(sys.argv[0])
-            out_fname = sys.argv[j]
+            by_expr = sys.argv[j]
             j+=1
             continue
-        if sys.argv[j]=="-groups":
+        if sys.argv[j]=="-by-group":
             by_groups = True
             j+=1
             continue
-        if sys.argv[j]=="-submitters":
+        if sys.argv[j]=="-by-submitter":
             by_submitters = True
+            j+=1
+            continue
+        if sys.argv[j]=="-constraint":
+            j+=1
+            if j>=argc: usage(sys.argv[0])
+            constraint = sys.argv[j]
             j+=1
             continue
         if sys.argv[j]=="-cum":
             cum_plots = True
+            j+=1
+            continue
+        if sys.argv[j]=="-with-total":
+            with_total = True
+            j+=1
+            continue
+        if sys.argv[j]=="-only-total":
+            only_total = True
             j+=1
             continue
         if sys.argv[j]=="-ratios":
@@ -132,6 +152,8 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
             if by_groups:
                 j = cur_ag.rfind('.')
                 if (j>=0): cur_ag = cur_ag[:j]
+        else:
+            cur_ag = t[3].strip('"')
 
         if (len(only)>0) and not (cur_ag in only): continue
         elif (len(ignore)>0) and (cur_ag in ignore): continue
@@ -153,9 +175,10 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         # translate time stamps to zero-based from t0
         tcur -= t0
         tcur /= timeslice
+        tcur *= timeslice
 
         # encountered a new acct grp -- fill in its previous time stamps
-        if (by_groups or by_submitters) and (not cum_map.has_key(cur_ag)):
+        if (not cum_map.has_key(cur_ag)):
             cum_map[cur_ag] = [[x[0], 0] for x in cum_map[""]]
 
         for ag in cum_map.keys():
@@ -178,15 +201,11 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
             for ag in cum_map.keys():
                 if ag != "": cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[""][j][1])
 
-    if not (by_groups or by_submitters):
-        cum_map["*total*"] = cum_map[""]
+    cum_map["*total*"] = cum_map[""]
     del cum_map[""]
 
     return cum_map
 
-
-if out_fname == None: out_file = sys.stdout
-else: out_file = open(out_fname, "w")
 
 # temp file for condor_history output
 ho_fname = tempfile.mktemp(prefix="ppt_")
@@ -198,7 +217,17 @@ if in_fname != None: chc.extend(['-f', in_fname])
 chc.extend(['-format', '%s', 'CompletionDate'])
 chc.extend(['-format', ' %s', 'EnteredCurrentStatus'])
 chc.extend(['-format', ' %s', 'JobStatus'])
-chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
+if by_groups or by_submitters:
+    chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
+elif by_expr != None:
+    chc.extend(['-format', ' %s\n', 'ifThenElse((%s)=!=UNDEFINED, (%s), "*undef*"' % (by_expr, by_expr)])
+else:
+    chc.extend(['-format', ' %s\n', 'ifThenElse(X=!=UNDEFINED, "***", "***"'])
+    only_total = True
+    ignore.append('*incomplete*')
+
+if constraint != None:
+    chc.extend(['-constraint', constraint])
 
 # invoke condor_history to generate our desired output
 subprocess.call(chc, stdout=ho_file)
@@ -224,10 +253,19 @@ title = title + " vs Time"
 
 fig = pyplot.figure()
 ax = fig.add_subplot(111)
+
+legkeys = []
 for k in keys:
+    if k == "***": continue
+    if only_total:
+        if (k != "*total*"): continue
+    elif (not with_total):
+        if (k == "*total*"): continue
     plt = ax.plot([x[0] for x in cum_map[k]], [x[1] for x in cum_map[k]])
+    legkeys.append(k)
+
 ax.set_xlabel(xlab)
 ax.set_ylabel(ylab)
 ax.set_title(title)
-ax.legend(keys)
+ax.legend(legkeys)
 pyplot.show()
