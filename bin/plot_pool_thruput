@@ -21,6 +21,7 @@ def usage(a):
     sys.stderr.write("       [ -by-submitter ] (categories by full submitter names)\n")
     sys.stderr.write("       [ -cum ] (cumulative plots)\n")
     sys.stderr.write("       [ -ratios ] (plot ratios relative to total values)\n")
+    sys.stderr.write("       [ -rate ] (plot rate -- jobs/time)\n")
     sys.stderr.write("       [ -timeslice <time-res> ] (default = 1 sec)\n")
     sys.stderr.write("       [ -ignore <cat1> [ <cat2> ...]] (ignore data from categories)\n")
     sys.stderr.write("       [ -only <cat1> [ <cat2> ...]] (consider only data from categories)\n")
@@ -44,6 +45,7 @@ by_groups = False
 by_submitters = False
 cum_plots = False
 ratio_plots = False
+rate_plots = False
 timeslice = 1
 ignore = []
 only = []
@@ -98,6 +100,10 @@ try:
             ratio_plots = True
             j+=1
             continue
+        if sys.argv[j]=="-rate":
+            rate_plots = True
+            j+=1
+            continue
         if sys.argv[j]=="-timeslice":
             j+=1
             if j>=argc: usage(sys.argv[0])
@@ -129,7 +135,7 @@ except:
     usage(argv[0])
 
 
-def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, timeslice=1, ignore=[], only=[]):
+def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[]):
     cum_map = {}
     cum_map[""] = []
     first = True
@@ -199,10 +205,20 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
                 cum_map[ag][j][1] += cum_map[ag][j-1][1]
 
     # normalize
-    if ratio_plots:
+    if rate_plots:
+        for ag in cum_map.keys(): cum_map[ag][0][1] = 0.0
+        for j in xrange(1, len(cum_map[""])):
+            if cum_plots:
+                for ag in cum_map.keys():
+                    cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[ag][j][0])
+            else:
+                for ag in cum_map.keys():
+                    cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[ag][j][0] - cum_map[ag][j-1][0])
+    elif ratio_plots:
         for j in xrange(0, len(cum_map[""])):
             for ag in cum_map.keys():
                 if ag != "": cum_map[ag][j][1] = float(cum_map[ag][j][1]) / float(cum_map[""][j][1])
+            cum_map[""][j][1] = 1.0
 
     cum_map["*total*"] = cum_map[""]
     del cum_map[""]
@@ -238,7 +254,7 @@ ho_file.close()
 
 # read the output of condor_history command and generate map of cumulative acct grp ratios
 ho_file = open(ho_fname, "r")
-cum_map = fill_cum_map(ho_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, timeslice=timeslice, ignore=ignore, only=only)
+cum_map = fill_cum_map(ho_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, rate_plots=rate_plots, timeslice=timeslice, ignore=ignore, only=only)
 
 keys = cum_map.keys()
 keys.sort()
