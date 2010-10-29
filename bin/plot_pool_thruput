@@ -11,7 +11,10 @@ import numpy
 
 
 def usage(a):
-    sys.stderr.write("usage: %s [options]\n")
+    aa = a
+    j = aa.rfind('/')
+    if j>=0: aa = aa[1+j:] 
+    sys.stderr.write("usage: %s [options]\n" % (aa))
     sys.stderr.write("       [ -f <history-file> ] (def = active condor history file)\n")
     sys.stderr.write("       [ -by <expr> ] (categories by value of <expr>)\n")
     sys.stderr.write("       [ -by-group ] (categories by accounting groups)\n")
