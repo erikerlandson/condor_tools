@@ -10,6 +10,7 @@ def usage(a):
     sys.stderr.write("usage: %s [options]\n")
     sys.stderr.write("       [ -n <number-of-jobs> (def = 1)\n")
     sys.stderr.write("       [ -submitters <num-submitters> ] (def = 1)\n")
+    sys.stderr.write("       [ -xgroups <g1> <n1> [ <g2> <n2> ... ] ] (use given pairs of acct group w/ number, exactly)\n")
     sys.stderr.write("       [ -duration <job-duration-secs> ] (def = 60)\n")
     sys.stderr.write("       [ -reqs <requirements-expr> ]\n")
     sys.stderr.write("       [ -shell (def = don't use shell wrapper)\n")
@@ -37,6 +38,7 @@ shell = False
 err_out = False
 std_out = False
 log_out = False
+xgroups = None
 
 # options
 try:
@@ -59,6 +61,17 @@ try:
             if j>=argc: usage(sys.argv[0])
             submitters = int(sys.argv[j])
             j+=1
+            continue
+        if sys.argv[j]=="-xgroups":
+            j+=1
+            opargs = 0
+            while ((j+1) < argc) and (sys.argv[j][:1] != '-'):
+                tn = int(sys.argv[j+1])
+                if xgroups == None: xgroups = {}
+                xgroups[sys.argv[j]] = tn
+                j += 2
+                opargs += 1
+            if opargs < 1: usage(sys.argv[0])
             continue
         if sys.argv[j]=="-reqs":
             j+=1
@@ -88,11 +101,14 @@ except SystemExit:
 except:
     usage(argv[0])
 
-homedir = os.environ['HOME']
 
 shcmd = ""
 if shell:
-    shcmd = "%s/bin/shcmd" % (homedir)
+    cpath = sys.argv[0]
+    j = cpath.rfind('/')
+    if j>=0: cpath = cpath[:j]
+    else:    cpath = "."
+    shcmd = "%s/shcmd" % (cpath)
     if not os.path.exists(shcmd):
         print "Could not find %s" % (shcmd)
         sys.exit(1)
@@ -128,32 +144,44 @@ jsfile.write("when_to_transfer_output = on_exit\n")
 if reqs != None:
     jsfile.write("requirements = %s\n" % (reqs))
 
-u_inc = float(n)/float(submitters)
-u_sum = 0.0
-u_max = float(n)
-u_cnt = 0
-u = 0
-j = 0
-while j < submitters:
-    u_sum += u_inc
-    u = int(u_sum)
-    u_sum -= float(u)
+nsub = 0
 
-    # Handle corner cases from roundoff err.
-    # Correction shouldn't actually exceed 1
-    u_cnt += u
-    if (j == (submitters-1)) and (u_cnt < n):
-        d = n-u_cnt
-        u += d
-        u_cnt += d
+if xgroups != None:
+    # construct using the groups and counts given in '-xgroups'
+    nsub = 0
+    for k in xgroups.keys():
+        gn = xgroups[k]
+        jsfile.write("+AccountingGroup=\"%s.user\"\n" % (k))
+        jsfile.write("queue %d\n" % (gn))
+        nsub += gn
+else:
+    # construct using (n) and (submitters)
+    u_inc = float(n)/float(submitters)
+    u_sum = 0.0
+    u_max = float(n)
+    u_cnt = 0
+    u = 0
+    j = 0
+    while j < submitters:
+        u_sum += u_inc
+        u = int(u_sum)
+        u_sum -= float(u)
 
-    jsfile.write("+AccountingGroup = \"%s\"\n" % ("none.user%04d" % j))
-    jsfile.write("queue %d\n" % (u))
-    j += 1
+        # Handle corner cases from roundoff err.
+        # Correction shouldn't actually exceed 1
+        u_cnt += u
+        if (j == (submitters-1)) and (u_cnt < n):
+            d = n-u_cnt
+            u += d
+            u_cnt += d
 
+        jsfile.write("+AccountingGroup = \"%s\"\n" % ("none.user%04d" % j))
+        jsfile.write("queue %d\n" % (u))
+        j += 1
+    nsub = u_cnt
 
 jsfile.close()
-print "submitting %d jobs via jsub file %s" % (u_cnt, jsfile_name)
+print "submitting %d jobs via jsub file %s" % (nsub, jsfile_name)
 # submit the file
 rc = subprocess.call(["condor_submit", jsfile_name])
 if rc == 0:
