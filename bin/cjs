@@ -5,105 +5,44 @@ import random
 import time
 import tempfile
 import subprocess
-
-def usage(a):
-    sys.stderr.write("usage: %s [options]\n")
-    sys.stderr.write("       [ -n <number-of-jobs> (def = 1)\n")
-    sys.stderr.write("       [ -submitters <num-submitters> ] (def = 1)\n")
-    sys.stderr.write("       [ -xgroups <g1> <n1> [ <g2> <n2> ... ] ] (use given pairs of acct group w/ number, exactly)\n")
-    sys.stderr.write("       [ -duration <job-duration-secs> ] (def = 60)\n")
-    sys.stderr.write("       [ -reqs <requirements-expr> ]\n")
-    sys.stderr.write("       [ -shell (def = don't use shell wrapper)\n")
-    sys.stderr.write("       [ -err (def = no err output)\n")
-    sys.stderr.write("       [ -std (def = no std output)\n")
-    sys.stderr.write("       [ -log (def = no log output)\n")
-    sys.exit(1)
+import argparse
 
 
-argv = sys.argv
-argc = len(argv)
+argparser = argparse.ArgumentParser()
+argparser.add_argument('-duration', dest='duration', type=int, default=60, metavar='<seconds>', help='job duration')
+argparser.add_argument('-n', dest='n', type=int, default=1, metavar='<num-jobs>')
+argparser.add_argument('-submitters', dest='submitters', type=int, default=1, metavar='<num-submitters>')
+argparser.add_argument('-xgroups', dest='xgroups_args', default=[], nargs='*', metavar='<grp> <num>')
+argparser.add_argument('-reqs', dest='reqs', default=None, metavar='<expr>', help='job requirement expression')
+argparser.add_argument('-shell', dest='shell', action='store_true', default=False, help='wrap sleep in shell command')
+argparser.add_argument('-err', dest='err_out', action='store_true', default=False, help='collect stderr from jobs')
+argparser.add_argument('-std', dest='std_out', action='store_true', default=False, help='collect stdout from jobs')
+argparser.add_argument('-log', dest='log_out', action='store_true', default=False, help='collect log from jobs')
+argparser.add_argument('-ss', dest='ss', action='store_true', default=False, help='submit in steady-state mode')
+argparser.add_argument('-ss-maxreps', dest='maxreps', default=None, type=int, metavar='<reps>')
+argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=int, metavar='<seconds>')
+argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>')
 
-fixedArgs = 0
-if argc <= fixedArgs: usage(argv[0])
+args = argparser.parse_args()
 
-# fixed args
-
-
-# option defaults
-n = 1
-duration = 60
-submitters = 1
-reqs = None
-shell = False
-err_out = False
-std_out = False
-log_out = False
 xgroups = None
-
-# options
-try:
-    j = fixedArgs+1
-    while j<argc:
-        if sys.argv[j]=="-n":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            n = int(sys.argv[j])
-            j+=1
-            continue
-        if sys.argv[j]=="-duration":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            duration = int(sys.argv[j])
-            j+=1
-            continue
-        if sys.argv[j]=="-submitters":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            submitters = int(sys.argv[j])
-            j+=1
-            continue
-        if sys.argv[j]=="-xgroups":
-            j+=1
-            opargs = 0
-            while ((j+1) < argc) and (sys.argv[j][:1] != '-'):
-                tn = int(sys.argv[j+1])
-                if xgroups == None: xgroups = {}
-                xgroups[sys.argv[j]] = tn
-                j += 2
-                opargs += 1
-            if opargs < 1: usage(sys.argv[0])
-            continue
-        if sys.argv[j]=="-reqs":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            reqs = sys.argv[j]
-            j+=1
-            continue
-        if sys.argv[j]=="-shell":
-            shell = True
-            j+=1
-            continue
-        if sys.argv[j]=="-err":
-            err_out = True
-            j+=1
-            continue
-        if sys.argv[j]=="-std":
-            std_out = True
-            j+=1
-            continue
-        if sys.argv[j]=="-log":
-            log_out = True
-            j+=1
-            continue
-        usage(argv[0])
-except SystemExit:
-    raise
-except:
-    usage(argv[0])
+if len(args.xgroups_args) > 0:
+    try:
+        xgroups = {}
+        j=0
+        while ((j+1) < len(args.xgroups_args)):
+            tn = int(args.xgroups_args[j+1])
+            xgroups[args.xgroups_args[j]] = tn
+            j += 2
+        if j < len(args.xgroups_args):
+            raise Exception()
+    except:
+        argparser.print_usage()
+        sys.exit(1)
 
 
 shcmd = ""
-if shell:
+if args.shell:
     cpath = sys.argv[0]
     j = cpath.rfind('/')
     if j>=0: cpath = cpath[:j]
@@ -118,31 +57,31 @@ print "using temp dir %s for jsub files" % (jsub_dir)
 
 # open a temporary submission file
 jsfile_name = "%s/cjs.jsub" % (jsub_dir)
-print "preparing %d jobs in submission file: %s" % (n, jsfile_name)
+print "preparing %d jobs in submission file: %s" % (args.n, jsfile_name)
 jsfile = open(jsfile_name, 'wb')
 
 # jsub "header" stuff
 jsfile.write("universe = vanilla\n")
 
-if shell:
+if args.shell:
     jsfile.write("cmd = %s\n" % (shcmd))
-    jsfile.write("args = /bin/sleep %d\n" % (duration))
+    jsfile.write("args = /bin/sleep %d\n" % (args.duration))
 else:
     jsfile.write("cmd = /bin/sleep\n")
-    jsfile.write("args = %d\n" % (duration))
+    jsfile.write("args = %d\n" % (args.duration))
 
-if std_out:
+if args.std_out:
     jsfile.write("output = %s/std.$(cluster).$(process)\n" % (jsub_dir))
-if err_out:
+if args.err_out:
     jsfile.write("error = %s/err.$(cluster).$(process)\n" % (jsub_dir))
-if log_out:
+if args.log_out:
     jsfile.write("log = %s/log.$(cluster).$(process)\n" % (jsub_dir))
 
 jsfile.write("should_transfer_files = if_needed\n")
 jsfile.write("when_to_transfer_output = on_exit\n")
 
-if reqs != None:
-    jsfile.write("requirements = %s\n" % (reqs))
+if args.reqs != None:
+    jsfile.write("requirements = (%s)\n" % (args.reqs))
 
 nsub = 0
 
@@ -156,13 +95,13 @@ if xgroups != None:
         nsub += gn
 else:
     # construct using (n) and (submitters)
-    u_inc = float(n)/float(submitters)
+    u_inc = float(args.n)/float(args.submitters)
     u_sum = 0.0
-    u_max = float(n)
+    u_max = float(args.n)
     u_cnt = 0
     u = 0
     j = 0
-    while j < submitters:
+    while j < args.submitters:
         u_sum += u_inc
         u = int(u_sum)
         u_sum -= float(u)
@@ -170,8 +109,8 @@ else:
         # Handle corner cases from roundoff err.
         # Correction shouldn't actually exceed 1
         u_cnt += u
-        if (j == (submitters-1)) and (u_cnt < n):
-            d = n-u_cnt
+        if (j == (args.submitters-1)) and (u_cnt < args.n):
+            d = args.n-u_cnt
             u += d
             u_cnt += d
 
@@ -181,10 +120,30 @@ else:
     nsub = u_cnt
 
 jsfile.close()
-print "submitting %d jobs via jsub file %s" % (nsub, jsfile_name)
-# submit the file
-rc = subprocess.call(["condor_submit", jsfile_name])
-if rc == 0:
-    print "submit was successful"
+
+if not args.ss:
+    print "submitting %d jobs via jsub file %s" % (nsub, jsfile_name)
+    # submit the file
+    rc = subprocess.call(["condor_submit", jsfile_name])
+    if rc == 0:
+        print "submit was successful"
+    else:
+        print "WARNING! submit failed with code %d" % rc
 else:
-    print "WARNING! submit failed with code %d" % rc
+    # steady-state submission mode
+    reps = 0
+    t0 = float(time.time())
+    tL = float(0)
+    while True:
+        tC = float(time.time())
+        tS = args.interval - (tC-tL)
+        if tS > 0: time.sleep(tS)
+        tL = float(time.time())
+        elapsed = int(tL - t0)
+        if (args.maxtime != None) and (elapsed >= args.maxtime): break
+        reps += 1
+        if (args.maxreps != None) and (reps > args.maxreps): break
+        sys.stdout.write("submission rep= %d, elapsed= %d\n" % (reps, elapsed))
+        rc = subprocess.call(["condor_submit", jsfile_name])
+        if rc != 0:
+            sys.stderr.write("submit was not successful!\n")
