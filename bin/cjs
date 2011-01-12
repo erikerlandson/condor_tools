@@ -22,6 +22,7 @@ argparser.add_argument('-ss', dest='ss', action='store_true', default=False, hel
 argparser.add_argument('-ss-maxreps', dest='maxreps', default=None, type=int, metavar='<reps>')
 argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=int, metavar='<seconds>')
 argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>')
+argparser.add_argument('-append', dest='append', default=[], action='append', metavar='<submit-line>')
 
 args = argparser.parse_args()
 
@@ -82,6 +83,9 @@ jsfile.write("when_to_transfer_output = on_exit\n")
 
 if args.reqs != None:
     jsfile.write("requirements = (%s)\n" % (args.reqs))
+
+for aline in args.append:
+    jsfile.write("%s\n" % (aline))
 
 nsub = 0
 
