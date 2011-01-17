@@ -6,15 +6,13 @@ import random
 import time, datetime
 import tempfile
 import subprocess
-import matplotlib.pyplot as pyplot
-import numpy
 import argparse
 
 import argparse_extensions
 
 
 argparser = argparse.ArgumentParser()
-argparser.add_argument('-f', dest='in_fname', metavar='<history-file>', default=None)
+argparser.add_argument('-f', dest='in_fname', metavar='<history-file>', default=None, help='def= current condor histor file')
 mxgroup = argparser.add_mutually_exclusive_group()
 mxgroup.add_argument('-by', dest='by_expr', default=None, metavar='<expr>', help='categories by value of <expr>')
 mxgroup.add_argument('-by-group', dest='by_groups', action='store_true', default=False, help='categories by acct groups')
@@ -30,11 +28,20 @@ mxgroup.add_argument('-only-total', dest='only_total', action='store_true', defa
 mxgroup = argparser.add_mutually_exclusive_group()
 mxgroup.add_argument('-ratios', dest='ratio_plots', action='store_true', default=False, help='plot ratios relative to totals')
 mxgroup.add_argument('-rate', dest='rate_plots', action='store_true', default=False, help='plot rate: jobs/time')
-argparser.add_argument('-timeslice', dest='timeslice', type=int, default=1, metavar='<seconds>')
-argparser.add_argument('-since', dest='since', action=argparse_extensions.time_arg_parser, default=None)
-argparser.add_argument('-until', dest='until', action=argparse_extensions.time_arg_parser, default=None)
+argparser.add_argument('-timeslice', dest='timeslice', type=int, default=1, metavar='<seconds>', help='def= 1 sec')
+argparser.add_argument('-since', dest='since', action=argparse_extensions.time_arg_parser, default=None, metavar='<time-expr>', help='ex: "1294696760", "10 min ago", "1h"')
+argparser.add_argument('-until', dest='until', action=argparse_extensions.time_arg_parser, default=None, metavar='<time-expr>')
+argparser.add_argument('-data', dest='data', nargs='?', type=argparse.FileType('w'), default=None, const=sys.stdout, metavar='<filename>', help='def= stdout')
+argparser.add_argument('-noplot', dest='doplot', action='store_false', default=True, help='no graphic plot (data only)')
 
 args = argparser.parse_args()
+
+if args.doplot:
+    # I won't require these unless we're plotting
+    import matplotlib.pyplot as pyplot
+    import numpy
+
+if (not args.doplot) and (args.data == None): args.data = sys.stdout
 
 def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[], since=None, until=None):
     cum_map = {}
@@ -164,32 +171,62 @@ cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_
 keys = cum_map.keys()
 keys.sort()
 
-xlab = "Time (sec)"
-ylab = "thruput"
-title = "thruput"
-if args.cum_plots:
-    ylab = "Cumulative " + ylab
-    title = "Cumulative " + title
-if args.ratio_plots:
-    ylab = ylab + " ratios"
-    title = title + " ratios"
-title = title + " vs Time"
+if args.doplot:
+    xlab = "Time (sec)"
+    ylab = "thruput"
+    title = "thruput"
+    if args.cum_plots:
+        ylab = "Cumulative " + ylab
+        title = "Cumulative " + title
+    if args.ratio_plots:
+        ylab = ylab + " ratios"
+        title = title + " ratios"
+    title = title + " vs Time"
 
-fig = pyplot.figure()
-ax = fig.add_subplot(111)
+    fig = pyplot.figure()
+    ax = fig.add_subplot(111)
+
 
 legkeys = []
+data = []
+
+
+if args.data != None:
+    dd = ["time"] 
+    dd += [x[0] for x in cum_map[keys[0]]]
+    data += [dd]
+
+
 for k in keys:
     if k == "***": continue
     if args.only_total:
         if (k != "*total*"): continue
     elif (not args.with_total):
         if (k == "*total*"): continue
-    plt = ax.plot([x[0] for x in cum_map[k]], [x[1] for x in cum_map[k]])
+    xx = [x[0] for x in cum_map[k]]
+    yy = [x[1] for x in cum_map[k]]
+    if args.doplot: plt = ax.plot(xx, yy)
     legkeys.append(k)
+    if args.data != None:
+        dd = [k]
+        dd += yy
+        data += [dd]
 
-ax.set_xlabel(xlab)
-ax.set_ylabel(ylab)
-ax.set_title(title)
-ax.legend(legkeys)
-pyplot.show()
+
+# do this before plot call below, so it isn't delayed
+if args.data != None:
+    r = len(data[0])
+    c = len(data)
+    for j in xrange(r):
+        row = "\t".join(["%s"%(data[k][j]) for k in xrange(c)])
+        args.data.write("%s\n"%(row))
+
+
+if args.doplot:
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    ax.legend(legkeys)
+    pyplot.show()
+
+
