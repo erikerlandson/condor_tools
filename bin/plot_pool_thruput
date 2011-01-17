@@ -8,131 +8,29 @@ import tempfile
 import subprocess
 import matplotlib.pyplot as pyplot
 import numpy
+import argparse
 
 
-def usage(a):
-    aa = a
-    j = aa.rfind('/')
-    if j>=0: aa = aa[1+j:] 
-    sys.stderr.write("usage: %s [options]\n" % (aa))
-    sys.stderr.write("       [ -f <history-file> ] (def = active condor history file)\n")
-    sys.stderr.write("       [ -by <expr> ] (categories by value of <expr>)\n")
-    sys.stderr.write("       [ -by-group ] (categories by accounting groups)\n")
-    sys.stderr.write("       [ -by-submitter ] (categories by full submitter names)\n")
-    sys.stderr.write("       [ -cum ] (cumulative plots)\n")
-    sys.stderr.write("       [ -ratios ] (plot ratios relative to total values)\n")
-    sys.stderr.write("       [ -rate ] (plot rate -- jobs/time)\n")
-    sys.stderr.write("       [ -timeslice <time-res> ] (default = 1 sec)\n")
-    sys.stderr.write("       [ -ignore <cat1> [ <cat2> ...]] (ignore data from categories)\n")
-    sys.stderr.write("       [ -only <cat1> [ <cat2> ...]] (consider only data from categories)\n")
-    sys.stderr.write("       [ -with-total ] (include total in plot)\n")
-    sys.stderr.write("       [ -only-total ] (show only the total in plot)\n")
-    sys.stderr.write("       [ -constraint <expr> ] (constrain output of condor_history with constraint-expr)\n")
-    sys.exit(1)
+argparser = argparse.ArgumentParser()
+argparser.add_argument('-f', dest='in_fname', metavar='<history-file>', default=None)
+mxgroup = argparser.add_mutually_exclusive_group()
+mxgroup.add_argument('-by', dest='by_expr', default=None, metavar='<expr>', help='categories by value of <expr>')
+mxgroup.add_argument('-by-group', dest='by_groups', action='store_true', default=False, help='categories by acct groups')
+mxgroup.add_argument('-by-submitter', dest='by_submitters', action='store_true', default=False, help='categories by submitter')
+mxgroup = argparser.add_mutually_exclusive_group()
+mxgroup.add_argument('-ignore', dest='ignore', nargs='+', default=[], metavar='<cat>')
+mxgroup.add_argument('-only', dest='only', nargs='+', default=[], metavar='<cat>')
+argparser.add_argument('-constraint', dest='constraint', default=None, metavar='<expr>')
+argparser.add_argument('-cum', dest='cum_plots', action='store_true', default=False, help='cumulative plots')
+mxgroup = argparser.add_mutually_exclusive_group()
+mxgroup.add_argument('-with-total', dest='with_total', action='store_true', default=False, help='include total in plot')
+mxgroup.add_argument('-only-total', dest='only_total', action='store_true', default=False, help='only total in plot')
+mxgroup = argparser.add_mutually_exclusive_group()
+mxgroup.add_argument('-ratios', dest='ratio_plots', action='store_true', default=False, help='plot ratios relative to totals')
+mxgroup.add_argument('-rate', dest='rate_plots', action='store_true', default=False, help='plot rate: jobs/time')
+argparser.add_argument('-timeslice', dest='timeslice', type=int, default=1, metavar='<seconds>')
 
-argv = sys.argv
-argc = len(argv)
-
-fixedArgs = 0
-if argc <= fixedArgs: usage(argv[0])
-
-# fixed args
-
-# option defaults
-in_fname = None
-by_expr = None
-by_groups = False
-by_submitters = False
-cum_plots = False
-ratio_plots = False
-rate_plots = False
-timeslice = 1
-ignore = []
-only = []
-with_total = False
-only_total = False
-constraint = None
-
-# options
-try:
-    j = fixedArgs+1
-    while j<argc:
-        if sys.argv[j]=="-h": usage()
-        if sys.argv[j]=="-f":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            in_fname = sys.argv[j]
-            j+=1
-            continue
-        if sys.argv[j]=="-by":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            by_expr = sys.argv[j]
-            j+=1
-            continue
-        if sys.argv[j]=="-by-group":
-            by_groups = True
-            j+=1
-            continue
-        if sys.argv[j]=="-by-submitter":
-            by_submitters = True
-            j+=1
-            continue
-        if sys.argv[j]=="-constraint":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            constraint = sys.argv[j]
-            j+=1
-            continue
-        if sys.argv[j]=="-cum":
-            cum_plots = True
-            j+=1
-            continue
-        if sys.argv[j]=="-with-total":
-            with_total = True
-            j+=1
-            continue
-        if sys.argv[j]=="-only-total":
-            only_total = True
-            j+=1
-            continue
-        if sys.argv[j]=="-ratios":
-            ratio_plots = True
-            j+=1
-            continue
-        if sys.argv[j]=="-rate":
-            rate_plots = True
-            j+=1
-            continue
-        if sys.argv[j]=="-timeslice":
-            j+=1
-            if j>=argc: usage(sys.argv[0])
-            timeslice = int(sys.argv[j])
-            j+=1
-            continue
-        if sys.argv[j]=="-ignore":
-            j+=1
-            opargs = 0
-            while (j < argc) and (sys.argv[j][:1] != '-'):
-                ignore.append(sys.argv[j])
-                j += 1
-                opargs += 1
-            if opargs < 1: usage(sys.argv[0])
-            continue
-        if sys.argv[j]=="-only":
-            j+=1
-            opargs = 0
-            while (j < argc) and (sys.argv[j][:1] != '-'):
-                only.append(sys.argv[j])
-                j += 1
-                opargs += 1
-            if opargs < 1: usage(sys.argv[0])
-            continue
-        usage(argv[0])
-except SystemExit:
-    raise
-except:
-    usage(argv[0])
+args = argparser.parse_args()
 
 
 def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[]):
@@ -232,21 +130,21 @@ ho_file = open(ho_fname, "w")
 
 # construct condor_history command
 chc = ['condor_history']
-if in_fname != None: chc.extend(['-f', in_fname])
+if args.in_fname != None: chc.extend(['-f', args.in_fname])
 chc.extend(['-format', '%s', 'CompletionDate'])
 chc.extend(['-format', ' %s', 'EnteredCurrentStatus'])
 chc.extend(['-format', ' %s', 'JobStatus'])
-if by_groups or by_submitters:
+if args.by_groups or args.by_submitters:
     chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
-elif by_expr != None:
-    chc.extend(['-format', ' %s\n', 'ifThenElse((%s)=!=UNDEFINED, (%s), "*undef*"' % (by_expr, by_expr)])
+elif args.by_expr != None:
+    chc.extend(['-format', ' %s\n', 'ifThenElse((%s)=!=UNDEFINED, (%s), "*undef*"' % (args.by_expr, args.by_expr)])
 else:
     chc.extend(['-format', ' %s\n', 'ifThenElse(X=!=UNDEFINED, "***", "***"'])
-    only_total = True
-    ignore.append('*incomplete*')
+    args.only_total = True
+    args.ignore.append('*incomplete*')
 
-if constraint != None:
-    chc.extend(['-constraint', constraint])
+if args.constraint != None:
+    chc.extend(['-constraint', args.constraint])
 
 # invoke condor_history to generate our desired output
 subprocess.call(chc, stdout=ho_file)
@@ -254,7 +152,7 @@ ho_file.close()
 
 # read the output of condor_history command and generate map of cumulative acct grp ratios
 ho_file = open(ho_fname, "r")
-cum_map = fill_cum_map(ho_file, by_groups=by_groups, by_submitters=by_submitters, cum_plots=cum_plots, ratio_plots=ratio_plots, rate_plots=rate_plots, timeslice=timeslice, ignore=ignore, only=only)
+cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_submitters, cum_plots=args.cum_plots, ratio_plots=args.ratio_plots, rate_plots=args.rate_plots, timeslice=args.timeslice, ignore=args.ignore, only=args.only)
 
 keys = cum_map.keys()
 keys.sort()
@@ -262,10 +160,10 @@ keys.sort()
 xlab = "Time (sec)"
 ylab = "thruput"
 title = "thruput"
-if cum_plots:
+if args.cum_plots:
     ylab = "Cumulative " + ylab
     title = "Cumulative " + title
-if ratio_plots:
+if args.ratio_plots:
     ylab = ylab + " ratios"
     title = title + " ratios"
 title = title + " vs Time"
@@ -276,9 +174,9 @@ ax = fig.add_subplot(111)
 legkeys = []
 for k in keys:
     if k == "***": continue
-    if only_total:
+    if args.only_total:
         if (k != "*total*"): continue
-    elif (not with_total):
+    elif (not args.with_total):
         if (k == "*total*"): continue
     plt = ax.plot([x[0] for x in cum_map[k]], [x[1] for x in cum_map[k]])
     legkeys.append(k)
