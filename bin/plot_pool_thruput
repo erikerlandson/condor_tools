@@ -10,6 +10,8 @@ import matplotlib.pyplot as pyplot
 import numpy
 import argparse
 
+import argparse_extensions
+
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('-f', dest='in_fname', metavar='<history-file>', default=None)
@@ -29,11 +31,12 @@ mxgroup = argparser.add_mutually_exclusive_group()
 mxgroup.add_argument('-ratios', dest='ratio_plots', action='store_true', default=False, help='plot ratios relative to totals')
 mxgroup.add_argument('-rate', dest='rate_plots', action='store_true', default=False, help='plot rate: jobs/time')
 argparser.add_argument('-timeslice', dest='timeslice', type=int, default=1, metavar='<seconds>')
+argparser.add_argument('-since', dest='since', action=argparse_extensions.time_arg_parser, default=None)
+argparser.add_argument('-until', dest='until', action=argparse_extensions.time_arg_parser, default=None)
 
 args = argparser.parse_args()
 
-
-def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[]):
+def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[], since=None, until=None):
     cum_map = {}
     cum_map[""] = []
     first = True
@@ -68,6 +71,10 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         # time
         if jstat == 4: tcur = int(t[0])
         else:          tcur = int(t[1])
+
+        # skip any data outside specified time range
+        if (since != None) and (tcur < since): continue
+        if (until != None) and (tcur > until): continue
 
         # determine zero-time
         if first:
@@ -152,7 +159,7 @@ ho_file.close()
 
 # read the output of condor_history command and generate map of cumulative acct grp ratios
 ho_file = open(ho_fname, "r")
-cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_submitters, cum_plots=args.cum_plots, ratio_plots=args.ratio_plots, rate_plots=args.rate_plots, timeslice=args.timeslice, ignore=args.ignore, only=args.only)
+cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_submitters, cum_plots=args.cum_plots, ratio_plots=args.ratio_plots, rate_plots=args.rate_plots, timeslice=args.timeslice, ignore=args.ignore, only=args.only, since=args.since, until=args.until)
 
 keys = cum_map.keys()
 keys.sort()
