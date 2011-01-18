@@ -8,11 +8,14 @@ import argparse
 class time_arg_parser(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         t0 = int(time.time())
+        date0 = time.strftime("%Y/%m/%d")
 
         vl = []
         if isinstance(values, list): vl = values
         else: vl = values.strip().split()
 
+
+        # interpret integer arg as 'seconds since Big Bang'
         try:
             if len(vl) != 1: raise Exception()
             t = int(vl[0])
@@ -21,6 +24,8 @@ class time_arg_parser(argparse.Action):
             setattr(namespace, self.dest, t)
             return
 
+
+        # interpret times like '10 min ago'  ('ago' may be left off)
         try:
             if not (len(vl) in [2,3]): raise Exception()
             if (len(vl) == 3) and (vl[2] != 'ago'): raise Exception()
@@ -37,6 +42,8 @@ class time_arg_parser(argparse.Action):
             setattr(namespace, self.dest, t)
             return
 
+
+        # interpret some 'sleep-style' times, like '10s', '5m', etc.  These are implicitly 'ago'
         try:
             if len(vl) != 1: raise Exception()
             tt = vl[0][:-1]
@@ -53,6 +60,28 @@ class time_arg_parser(argparse.Action):
         else:
             setattr(namespace, self.dest, t)
             return
+
+
+        # interpret some specific date/time formats
+        for fmt in ["%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M", "%Y/%m/%d"]:
+            try:
+                t = int(time.mktime(time.strptime(" ".join(vl), fmt)))
+            except: pass
+            else:
+                setattr(namespace, self.dest, t)
+                return
+
+
+        # interpret "%H:%M:%S", etc  (y/m/d is taken as current date)
+        for fmt in ["%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M"]:
+            tstr = date0 + " " + " ".join(vl)
+            try:
+                t = int(time.mktime(time.strptime(tstr, fmt)))
+            except: pass
+            else:
+                setattr(namespace, self.dest, t)
+                return
+
 
         # if none of the above apply, we failed to parse and it's an error
         sys.stderr.write("bad time format\n\n")
