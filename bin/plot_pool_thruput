@@ -2,7 +2,6 @@
 
 
 import sys, os, os.path, string, glob, math
-import random
 import time, datetime
 import tempfile
 import subprocess
@@ -33,7 +32,7 @@ argparser.add_argument('-since', dest='since', action=argparse_extensions.time_a
 argparser.add_argument('-until', dest='until', action=argparse_extensions.time_arg_parser, default=None, metavar='<time-expr>')
 argparser.add_argument('-data', dest='data', nargs='?', type=argparse.FileType('w'), default=None, const=sys.stdout, metavar='<filename>', help='def= stdout')
 argparser.add_argument('-noplot', dest='doplot', action='store_false', default=True, help='no graphic plot (data only)')
-
+argparser.add_argument('-submissions', action='store_true', default=False, help='plot job submissions instead of completions')
 args = argparser.parse_args()
 
 if args.doplot:
@@ -43,7 +42,7 @@ if args.doplot:
 
 if (not args.doplot) and (args.data == None): args.data = sys.stdout
 
-def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[], since=None, until=None):
+def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[], since=None, until=None, submissions=False):
     cum_map = {}
     cum_map[""] = []
     first = True
@@ -61,8 +60,8 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         # job status
         jstat = int(t[2])
 
-        # keep track of most recent accounting group mentioned
-        if jstat != 4:
+        # assign a grouping value
+        if (jstat != 4) and not submissions:
             cur_ag = '*incomplete*'
         elif (by_groups or by_submitters):
             cur_ag = t[3].strip('"')
@@ -76,8 +75,8 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         elif (len(ignore)>0) and (cur_ag in ignore): continue
 
         # time
-        if jstat == 4: tcur = int(t[0])
-        else:          tcur = int(t[1])
+        if (jstat == 4) or submissions: tcur = int(t[0])
+        else:                           tcur = int(t[1])
 
         # skip any data outside specified time range
         if (since != None) and (tcur < since): continue
@@ -144,10 +143,15 @@ ho_file = open(ho_fname, "w")
 
 # construct condor_history command
 chc = ['condor_history']
+
 if args.in_fname != None: chc.extend(['-f', args.in_fname])
-chc.extend(['-format', '%s', 'CompletionDate'])
+
+if args.submissions: chc.extend(['-format', '%s', 'QDate'])
+else:                chc.extend(['-format', '%s', 'CompletionDate'])
+
 chc.extend(['-format', ' %s', 'EnteredCurrentStatus'])
 chc.extend(['-format', ' %s', 'JobStatus'])
+
 if args.by_groups or args.by_submitters:
     chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
 elif args.by_expr != None:
@@ -155,7 +159,7 @@ elif args.by_expr != None:
 else:
     chc.extend(['-format', ' %s\n', 'ifThenElse(X=!=UNDEFINED, "***", "***"'])
     args.only_total = True
-    args.ignore.append('*incomplete*')
+    if not args.submissions: args.ignore.append('*incomplete*')
 
 if args.constraint != None:
     chc.extend(['-constraint', args.constraint])
@@ -163,10 +167,11 @@ if args.constraint != None:
 # invoke condor_history to generate our desired output
 subprocess.call(chc, stdout=ho_file)
 ho_file.close()
+subprocess.call(["sort", "-n", "-o", "%s_sort"%(ho_fname), ho_fname])
 
 # read the output of condor_history command and generate map of cumulative acct grp ratios
-ho_file = open(ho_fname, "r")
-cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_submitters, cum_plots=args.cum_plots, ratio_plots=args.ratio_plots, rate_plots=args.rate_plots, timeslice=args.timeslice, ignore=args.ignore, only=args.only, since=args.since, until=args.until)
+ho_file = open("%s_sort"%(ho_fname), "r")
+cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_submitters, cum_plots=args.cum_plots, ratio_plots=args.ratio_plots, rate_plots=args.rate_plots, timeslice=args.timeslice, ignore=args.ignore, only=args.only, since=args.since, until=args.until, submissions=args.submissions)
 
 keys = cum_map.keys()
 keys.sort()
