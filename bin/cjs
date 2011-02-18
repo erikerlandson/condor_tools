@@ -23,6 +23,8 @@ argparser.add_argument('-ss-maxreps', dest='maxreps', default=None, type=int, me
 argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=int, metavar='<seconds>')
 argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>')
 argparser.add_argument('-append', dest='append', default=[], action='append', metavar='<submit-line>')
+argparser.add_argument('-remote', default=None, metavar='<schedd-name>')
+argparser.add_argument('-name', default=None, metavar='<schedd-name>')
 
 args = argparser.parse_args()
 
@@ -125,10 +127,18 @@ else:
 
 jsfile.close()
 
+
+# build the submit command
+subcmd = ["condor_submit"]
+if args.name is not None: subcmd += ["-name", args.name]
+if args.remote is not None: subcmd += ["-remote", args.remote]
+subcmd += [jsfile_name]
+
+
 if not args.ss:
     print "submitting %d jobs via jsub file %s" % (nsub, jsfile_name)
     # submit the file
-    rc = subprocess.call(["condor_submit", jsfile_name])
+    rc = subprocess.call(subcmd)
     if rc == 0:
         print "submit was successful"
     else:
@@ -148,6 +158,6 @@ else:
         reps += 1
         if (args.maxreps != None) and (reps > args.maxreps): break
         sys.stdout.write("submission rep= %d, elapsed= %d\n" % (reps, elapsed))
-        rc = subprocess.call(["condor_submit", jsfile_name])
+        rc = subprocess.call(subcmd)
         if rc != 0:
             sys.stderr.write("submit was not successful!\n")
