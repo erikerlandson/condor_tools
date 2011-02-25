@@ -20,7 +20,7 @@ argparser.add_argument('-std', dest='std_out', action='store_true', default=Fals
 argparser.add_argument('-log', dest='log_out', action='store_true', default=False, help='collect log from jobs')
 argparser.add_argument('-ss', dest='ss', action='store_true', default=False, help='submit in steady-state mode')
 argparser.add_argument('-ss-maxreps', dest='maxreps', default=None, type=int, metavar='<reps>')
-argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=int, metavar='<seconds>')
+argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=float, metavar='<seconds>')
 argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>')
 argparser.add_argument('-append', dest='append', default=[], action='append', metavar='<submit-line>')
 argparser.add_argument('-remote', default=None, metavar='<schedd-name>')
@@ -147,17 +147,28 @@ else:
     # steady-state submission mode
     reps = 0
     t0 = float(time.time())
-    tL = float(0)
+    tL = t0
+    elapsed = 0.0
+    ssub = 0
     while True:
+        rc = subprocess.call(subcmd)
+        if rc != 0:
+            res = "FAIL"
+        else:
+            ssub += 1
+            res = "succ"
+
+        elapsedL = elapsed
+        elapsed = float(time.time()) - t0
+        reps += 1
+        sys.stdout.flush()
+        sys.stdout.write("\nsubmission rep= %6d  elapsed= %8.2f  ssub= %6d  tdelta= %5.2f  res= %s\n" % (reps, elapsed, ssub, elapsed-elapsedL, res))
+        sys.stdout.flush()
+
+        if (args.maxreps != None) and (reps >= args.maxreps): break
+        if (args.maxtime != None) and (elapsed >= args.maxtime): break
+
         tC = float(time.time())
         tS = args.interval - (tC-tL)
         if tS > 0: time.sleep(tS)
         tL = float(time.time())
-        elapsed = int(tL - t0)
-        if (args.maxtime != None) and (elapsed >= args.maxtime): break
-        reps += 1
-        if (args.maxreps != None) and (reps > args.maxreps): break
-        sys.stdout.write("submission rep= %d, elapsed= %d\n" % (reps, elapsed))
-        rc = subprocess.call(subcmd)
-        if rc != 0:
-            sys.stderr.write("submit was not successful!\n")

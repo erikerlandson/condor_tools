@@ -52,9 +52,10 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
     for ln in in_file:
         line_num += 1
         raw_ln = ln
-        ln = ln.strip('\r\n')
+        ln = ln.strip(' \t\r\n')
         t = ln.split()
 
+        if t[0] == '***': continue
         if (len(t) < 4): continue
 
         # job status
