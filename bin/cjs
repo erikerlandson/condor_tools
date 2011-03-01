@@ -25,6 +25,7 @@ argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, m
 argparser.add_argument('-append', dest='append', default=[], action='append', metavar='<submit-line>')
 argparser.add_argument('-remote', default=None, metavar='<schedd-name>')
 argparser.add_argument('-name', default=None, metavar='<schedd-name>')
+argparser.add_argument('-dir', default=None, metavar='<directory>', help='place working data/dirs in <directory>')
 
 args = argparser.parse_args()
 
@@ -55,7 +56,9 @@ if args.shell:
         print "Could not find %s" % (shcmd)
         sys.exit(1)
 
-jsub_dir = tempfile.mkdtemp(prefix='cjs_jsub_')
+if args.dir is None: jsub_dir = tempfile.mkdtemp(prefix='cjs_jsub_')
+else:                jsub_dir = tempfile.mkdtemp(prefix='cjs_jsub_', dir=args.dir)
+
 print "using temp dir %s for jsub files" % (jsub_dir)
 
 # open a temporary submission file
@@ -152,6 +155,8 @@ else:
     ssub = 0
     while True:
         rc = subprocess.call(subcmd)
+        tt = time.time()
+        dt = time.strftime("%Y/%m/%d %H:%M:%S")
         if rc != 0:
             res = "FAIL"
         else:
@@ -159,10 +164,10 @@ else:
             res = "succ"
 
         elapsedL = elapsed
-        elapsed = float(time.time()) - t0
+        elapsed = float(tt) - t0
         reps += 1
         sys.stdout.flush()
-        sys.stdout.write("\nsubmission rep= %6d  elapsed= %8.2f  ssub= %6d  tdelta= %5.2f  res= %s\n" % (reps, elapsed, ssub, elapsed-elapsedL, res))
+        sys.stdout.write("\nsubmission rep= %6d  elapsed= %8.2f  ssub= %6d  tdelta= %5.2f  res= %s  ts= %s\n" % (reps, elapsed, ssub, elapsed-elapsedL, res, dt))
         sys.stdout.flush()
 
         if (args.maxreps != None) and (reps >= args.maxreps): break
