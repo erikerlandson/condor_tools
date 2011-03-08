@@ -157,7 +157,7 @@ if args.by_groups or args.by_submitters:
 elif args.by_expr != None:
     chc.extend(['-format', ' %s\n', 'ifThenElse((%s)=!=UNDEFINED, (%s), "*undef*"' % (args.by_expr, args.by_expr)])
 else:
-    chc.extend(['-format', ' %s\n', 'ifThenElse(X=!=UNDEFINED, "***", "***"'])
+    chc.extend(['-format', ' ***\n', 'X'])
     args.only_total = True
     if not args.submissions: args.ignore.append('*incomplete*')
 

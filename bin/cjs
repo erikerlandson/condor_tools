@@ -26,6 +26,7 @@ argparser.add_argument('-append', dest='append', default=[], action='append', me
 argparser.add_argument('-remote', default=None, metavar='<schedd-name>')
 argparser.add_argument('-name', default=None, metavar='<schedd-name>')
 argparser.add_argument('-dir', default=None, metavar='<directory>', help='place working data/dirs in <directory>')
+argparser.add_argument('-vs', action='store_true', default=False, help='verbose submit')
 
 args = argparser.parse_args()
 
@@ -133,6 +134,7 @@ jsfile.close()
 
 # build the submit command
 subcmd = ["condor_submit"]
+if args.vs: subcmd += ["-verbose"]
 if args.name is not None: subcmd += ["-name", args.name]
 if args.remote is not None: subcmd += ["-remote", args.remote]
 subcmd += [jsfile_name]
