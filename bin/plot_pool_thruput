@@ -33,6 +33,9 @@ argparser.add_argument('-until', dest='until', action=argparse_extensions.time_a
 argparser.add_argument('-data', dest='data', nargs='?', type=argparse.FileType('w'), default=None, const=sys.stdout, metavar='<filename>', help='def= stdout')
 argparser.add_argument('-noplot', dest='doplot', action='store_false', default=True, help='no graphic plot (data only)')
 argparser.add_argument('-submissions', action='store_true', default=False, help='plot job submissions instead of completions')
+argparser.add_argument('-hof', default=None, metavar='<filename>', help='use <filename> for precomputed history output')
+argparser.add_argument('-hof-out', default=None, metavar='<filename>', help='save history output to <filename>')
+
 args = argparser.parse_args()
 
 if args.doplot:
@@ -41,6 +44,11 @@ if args.doplot:
     import numpy
 
 if (not args.doplot) and (args.data == None): args.data = sys.stdout
+
+if not (args.by_groups or args.by_submitters or args.by_expr):
+    args.only_total = True
+    if not args.submissions: args.ignore.append('*incomplete*')
+
 
 def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[], since=None, until=None, submissions=False):
     cum_map = {}
@@ -137,41 +145,52 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
     return cum_map
 
 
-# temp file for condor_history output
-ho_fname = tempfile.mktemp(prefix="ppt_")
-ho_file = open(ho_fname, "w")
-
-# construct condor_history command
-chc = ['condor_history']
-
-if args.in_fname != None: chc.extend(['-f', args.in_fname])
-
-if args.submissions: chc.extend(['-format', '%s', 'QDate'])
-else:                chc.extend(['-format', '%s', 'CompletionDate'])
-
-chc.extend(['-format', ' %s', 'EnteredCurrentStatus'])
-chc.extend(['-format', ' %s', 'JobStatus'])
-
-if args.by_groups or args.by_submitters:
-    chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
-elif args.by_expr != None:
-    chc.extend(['-format', ' %s\n', 'ifThenElse((%s)=!=UNDEFINED, (%s), "*undef*"' % (args.by_expr, args.by_expr)])
+if args.hof is not None:
+    # use precomputed history output file if requested
+    ho_file = open(args.hof, "r")
 else:
-    chc.extend(['-format', ' ***\n', 'X'])
-    args.only_total = True
-    if not args.submissions: args.ignore.append('*incomplete*')
+    # temp file for condor_history output
+    ho_fname = tempfile.mktemp(prefix="ppt_")
+    ho_file = open(ho_fname, "w")
 
-if args.constraint != None:
-    chc.extend(['-constraint', args.constraint])
+    # construct condor_history command
+    chc = ['condor_history']
 
-# invoke condor_history to generate our desired output
-subprocess.call(chc, stdout=ho_file)
-ho_file.close()
-subprocess.call(["sort", "-n", "-o", "%s_sort"%(ho_fname), ho_fname])
+    if args.in_fname != None: chc.extend(['-f', args.in_fname])
 
-# read the output of condor_history command and generate map of cumulative acct grp ratios
-ho_file = open("%s_sort"%(ho_fname), "r")
+    if args.submissions: chc.extend(['-format', '%s', 'QDate'])
+    else:                chc.extend(['-format', '%s', 'CompletionDate'])
+
+    chc.extend(['-format', ' %s', 'EnteredCurrentStatus'])
+    chc.extend(['-format', ' %s', 'JobStatus'])
+
+    if args.by_groups or args.by_submitters:
+        chc.extend(['-format', ' %s\n', 'ifThenElse(AccountingGroup=!=UNDEFINED, AccountingGroup, "*none*"'])
+    elif args.by_expr != None:
+        chc.extend(['-format', ' %s\n', 'ifThenElse((%s)=!=UNDEFINED, (%s), "*undef*"' % (args.by_expr, args.by_expr)])
+    else:
+        chc.extend(['-format', ' ***\n', 'X'])
+
+    if args.constraint != None:
+        chc.extend(['-constraint', args.constraint])
+
+    # invoke condor_history to generate our desired output
+    subprocess.call(chc, stdout=ho_file)
+    ho_file.close()
+
+    if args.hof_out is not None:
+        hos_fname = args.hof_out
+    else:
+        hos_fname = "%s_sort"%(ho_fname)
+
+    subprocess.call(["sort", "-n", "-o", hos_fname, ho_fname])
+
+    # read the output of condor_history command and generate map of cumulative acct grp ratios
+    ho_file = open(hos_fname, "r")
+
+
 cum_map = fill_cum_map(ho_file, by_groups=args.by_groups, by_submitters=args.by_submitters, cum_plots=args.cum_plots, ratio_plots=args.ratio_plots, rate_plots=args.rate_plots, timeslice=args.timeslice, ignore=args.ignore, only=args.only, since=args.since, until=args.until, submissions=args.submissions)
+
 
 keys = cum_map.keys()
 keys.sort()
