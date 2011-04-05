@@ -13,6 +13,7 @@ argparser.add_argument('-duration', dest='duration', type=int, default=60, metav
 argparser.add_argument('-n', dest='n', type=int, default=1, metavar='<num-jobs>')
 argparser.add_argument('-submitters', dest='submitters', type=int, default=1, metavar='<num-submitters>')
 argparser.add_argument('-xgroups', dest='xgroups_args', default=[], nargs='*', metavar='<grp> <num>')
+argparser.add_argument('-xsubmitters', dest='xsubmitters_args', default=[], nargs='*', metavar='<submitter> <num>')
 argparser.add_argument('-reqs', dest='reqs', default=None, metavar='<expr>', help='job requirement expression')
 argparser.add_argument('-shell', dest='shell', action='store_true', default=False, help='wrap sleep in shell command')
 argparser.add_argument('-err', dest='err_out', action='store_true', default=False, help='collect stderr from jobs')
@@ -40,6 +41,21 @@ if len(args.xgroups_args) > 0:
             xgroups[args.xgroups_args[j]] = tn
             j += 2
         if j < len(args.xgroups_args):
+            raise Exception()
+    except:
+        argparser.print_usage()
+        sys.exit(1)
+
+xsubmitters = None
+if len(args.xsubmitters_args) > 0:
+    try:
+        xsubmitters = {}
+        j=0
+        while ((j+1) < len(args.xsubmitters_args)):
+            tn = int(args.xsubmitters_args[j+1])
+            xsubmitters[args.xsubmitters_args[j]] = tn
+            j += 2
+        if j < len(args.xsubmitters_args):
             raise Exception()
     except:
         argparser.print_usage()
@@ -95,7 +111,15 @@ for aline in args.append:
 
 nsub = 0
 
-if xgroups != None:
+if xsubmitters != None:
+    # construct using the submitter names and counts given in '-xsubmitters'
+    nsub = 0
+    for k in xsubmitters.keys():
+        gn = xsubmitters[k]
+        jsfile.write("+AccountingGroup=\"%s\"\n" % (k))
+        jsfile.write("queue %d\n" % (gn))
+        nsub += gn
+elif xgroups != None:
     # construct using the groups and counts given in '-xgroups'
     nsub = 0
     for k in xgroups.keys():
