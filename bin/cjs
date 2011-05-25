@@ -10,6 +10,7 @@ import argparse
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('-duration', dest='duration', type=int, default=60, metavar='<seconds>', help='job duration')
+argparser.add_argument('-maxduration', type=int, default=None, metavar='<seconds>', help='maximum job duration (range)')
 argparser.add_argument('-n', dest='n', type=int, default=1, metavar='<num-jobs>')
 argparser.add_argument('-submitters', dest='submitters', type=int, default=1, metavar='<num-submitters>')
 argparser.add_argument('-xgroups', dest='xgroups_args', default=[], nargs='*', metavar='<grp> <num>')
@@ -86,12 +87,16 @@ jsfile = open(jsfile_name, 'wb')
 # jsub "header" stuff
 jsfile.write("universe = vanilla\n")
 
+jobdur = "%d"%(args.duration)
+if args.maxduration is not None:
+    jobdur = "$$([%d + random(%d)])" % (args.duration, 1+args.maxduration-args.duration)
+
 if args.shell:
     jsfile.write("cmd = %s\n" % (shcmd))
-    jsfile.write("args = /bin/sleep %d\n" % (args.duration))
+    jsfile.write("args = /bin/sleep %s\n" % (jobdur))
 else:
     jsfile.write("cmd = /bin/sleep\n")
-    jsfile.write("args = %d\n" % (args.duration))
+    jsfile.write("args = %s\n" % (jobdur))
 
 if args.std_out:
     jsfile.write("output = %s/std.$(cluster).$(process)\n" % (jsub_dir))
