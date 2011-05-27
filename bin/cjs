@@ -16,19 +16,20 @@ argparser.add_argument('-submitters', dest='submitters', type=int, default=1, me
 argparser.add_argument('-xgroups', dest='xgroups_args', default=[], nargs='*', metavar='<grp> <num>')
 argparser.add_argument('-xsubmitters', dest='xsubmitters_args', default=[], nargs='*', metavar='<submitter> <num>')
 argparser.add_argument('-reqs', dest='reqs', default=None, metavar='<expr>', help='job requirement expression')
+argparser.add_argument('-append', dest='append', default=[], action='append', metavar='<submit-line>')
+argparser.add_argument('-universe', choices=['vanilla', 'parallel'], default='vanilla', metavar='<universe>', help='job universe type')
+argparser.add_argument('-remote', default=None, metavar='<schedd-name>')
+argparser.add_argument('-name', default=None, metavar='<schedd-name>')
 argparser.add_argument('-shell', dest='shell', action='store_true', default=False, help='wrap sleep in shell command')
 argparser.add_argument('-err', dest='err_out', action='store_true', default=False, help='collect stderr from jobs')
 argparser.add_argument('-std', dest='std_out', action='store_true', default=False, help='collect stdout from jobs')
 argparser.add_argument('-log', dest='log_out', action='store_true', default=False, help='collect log from jobs')
+argparser.add_argument('-vs', action='store_true', default=False, help='verbose submit')
 argparser.add_argument('-ss', dest='ss', action='store_true', default=False, help='submit in steady-state mode')
 argparser.add_argument('-ss-maxreps', dest='maxreps', default=None, type=int, metavar='<reps>')
 argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=float, metavar='<seconds>')
 argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>')
-argparser.add_argument('-append', dest='append', default=[], action='append', metavar='<submit-line>')
-argparser.add_argument('-remote', default=None, metavar='<schedd-name>')
-argparser.add_argument('-name', default=None, metavar='<schedd-name>')
 argparser.add_argument('-dir', default=None, metavar='<directory>', help='place working data/dirs in <directory>')
-argparser.add_argument('-vs', action='store_true', default=False, help='verbose submit')
 
 args = argparser.parse_args()
 
@@ -85,7 +86,7 @@ print "preparing %d jobs in submission file: %s" % (args.n, jsfile_name)
 jsfile = open(jsfile_name, 'wb')
 
 # jsub "header" stuff
-jsfile.write("universe = vanilla\n")
+jsfile.write("universe = %s\n" % (args.universe))
 
 jobdur = "%d"%(args.duration)
 if args.maxduration is not None:
