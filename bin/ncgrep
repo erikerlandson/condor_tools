@@ -33,6 +33,7 @@ cycle_lines = 0
 cycle_failed = False
 until_failed = False
 reuse_ncfile = False
+ncfile = None
 
 for line in args.file:
     # if user specified -until, and we hit a cycle that failed, we can halt
@@ -123,5 +124,7 @@ for fname in onames:
     os.remove(fname)
 
 # clean up dangling temp file
+if (ncfile is not None):
+    ncfile.close()
 if (ncfilename is not None) and (os.path.exists(ncfilename)):
     os.remove(ncfilename)
