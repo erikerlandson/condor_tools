@@ -30,28 +30,56 @@ end_cycle = False
 e_match = False
 matching_files = []
 cycle_lines = 0
+cycle_failed = False
+until_failed = False
+reuse_ncfile = False
+
 for line in args.file:
-    if re.match('.*Started Negotiation Cycle.*', line): 
+    # if user specified -until, and we hit a cycle that failed, we can halt
+    # since remaining cycles all come even later in time and will also fail
+    if until_failed: break
+
+    if not in_cycle and "Started Negotiation" in line:
         in_cycle = True
-        ncfilename = tempfile.mktemp(prefix="ncgrep_")
-        ncfile = open(ncfilename, "w")
+        if not reuse_ncfile:
+            ncfilename = tempfile.mktemp(prefix="ncgrep_")
+            ncfile = open(ncfilename, "w")
         cycle_lines = 0
         e_match = (len(args.e) <= 0)
         since_match = (args.since is None)
         until_match = (args.until is None)
-    elif in_cycle and re.match('.*Finished Negotiation Cycle.*', line):
+        cycle_failed = False
+    elif "Finished Negotiation" in line:
         end_cycle = True
     
     # if we're between cycles, continue to next line
     if not in_cycle: continue
 
-    # save the line to current cycle file
     cycle_lines += 1
+
+    # if we can eliminate this cycle early, skip expensive checks
+    # (last line in cycle requires going through entire iteration)
+    if cycle_failed and not end_cycle: continue
+
+    # save the line to current cycle file
     ncfile.write(line)
 
     # timestamp
     flds = line.strip().split(' ')
     timestamp = int(time.mktime(time.strptime(' '.join(flds[:tsflds]), args.timestamp_format)))
+
+    # test since and until
+    if (cycle_lines <= 1) and (args.since is not None):
+        if timestamp >= args.since:
+            since_match = True
+        else:
+            cycle_failed = True
+    if (end_cycle) and (args.until is not None):
+        if timestamp <= args.until:
+            until_match = True
+        else:
+            cycle_failed = True
+            until_failed = True
 
     # test '-e' patterns
     if not e_match and (len(args.e) > 0):
@@ -59,21 +87,20 @@ for line in args.file:
             e_match = (re.search(regexp, line) is not None)
             if e_match: break
 
-    # test since and until
-    if (cycle_lines <= 1) and (args.since is not None):
-        if timestamp >= args.since: since_match = True
-    if (end_cycle) and (args.until is not None):
-        if timestamp <= args.until: until_match = True
-
     if end_cycle:
-        ncfile.close()
         in_cycle = False
         end_cycle = False
         # test whether cycle matched all conditions
         cycle_match = e_match and since_match and until_match
         # only save cycles that matched all the given conditions
-        if cycle_match: matching_files.append(ncfilename)
-        else: os.remove(ncfilename)
+        if cycle_match:
+            ncfile.close()
+            matching_files.append(ncfilename)
+            reuse_ncfile = False
+        else:
+            # cycle didn't match, so we can reuse file and overwrite its data
+            ncfile.seek(0)
+            reuse_ncfile = True
 
 
 # Get the first/last subset of matching files
@@ -94,3 +121,7 @@ for fname in onames:
     for ln in f: args.ofile.write(ln)
     f.close()
     os.remove(fname)
+
+# clean up dangling temp file
+if (ncfilename is not None) and (os.path.exists(ncfilename)):
+    os.remove(ncfilename)
