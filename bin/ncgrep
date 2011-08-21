@@ -13,12 +13,14 @@ import argparse_extensions
 argparser = argparse.ArgumentParser()
 argparser.add_argument('file', nargs='?', type=argparse.FileType('r'), default=sys.stdin, metavar='<filename>', help='def= stdin')
 argparser.add_argument('-ofile', type=argparse.FileType('w'), default=sys.stdout, metavar='<outputfile>', help='def= stdout')
-argparser.add_argument('-last', nargs='?', type=int, default=0, const=1, metavar='<N>', help='last N cycles: def= all')
-argparser.add_argument('-first', nargs='?', type=int, default=0, const=1, metavar='<N>', help='first N cycles: def= all')
-argparser.add_argument('-e', default=[], action='append', metavar='<regexp>', help='cycles matching regexp (like grep -e)')
-argparser.add_argument('-since', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='ex: "1294696760", "10 min ago", "1h", "2010/12/31", "2010/12/31 15:30:00"')
-argparser.add_argument('-until', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>')
-argparser.add_argument('-timestamp-format', default="%m/%d/%y %H:%M:%S", metavar='<fmt>', help='def="%%m/%%d/%%y %%H:%%M:%%S"')
+argparser.add_argument('-first', nargs='?', type=int, default=0, const=1, metavar='<N>', help='select first N matching cycles: N def= 1')
+argparser.add_argument('-last', nargs='?', type=int, default=0, const=1, metavar='<N>', help='select last N matching cycles:  N def= 1')
+argparser.add_argument('-e', default=[], action='append', metavar='<regexp>', help='select cycles with >= 1 line matching regexp (like grep -e)')
+argparser.add_argument('-since', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='select cycles since given time. ex: "1294696760", "10 min ago", "1h", "2010/12/31", "2010/12/31 15:30:00"')
+argparser.add_argument('-until', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='select cycles until given time.  see -since')
+argparser.add_argument('-group-negotiated', metavar='<regexp>', help='select cycles when group matching <regexp> negotiated')
+argparser.add_argument('-submitter-negotiated', metavar='<regexp>', help='select cycles when submitter matching <regexp> negotiated')
+argparser.add_argument('-timestamp-format', default="%m/%d/%y %H:%M:%S", metavar='<fmt>', help='log timestamp format: def="%%m/%%d/%%y %%H:%%M:%%S"')
 
 # parse command line
 args = argparser.parse_args()
@@ -51,10 +53,12 @@ for line in args.file:
         e_match = (len(args.e) <= 0)
         since_match = (args.since is None)
         until_match = (args.until is None)
+        group_negotiated_match = (args.group_negotiated is None)
+        submitter_negotiated_match = (args.submitter_negotiated is None)
         cycle_failed = False
         current_group = ""
         current_submitter = ""
-    elif "Finished Negotiation" in line:
+    elif in_cycle and "Finished Negotiation" in line:
         end_cycle = True
     
     # if we're between cycles, continue to next line
@@ -107,11 +111,17 @@ for line in args.file:
             e_match = (re.search(regexp, line) is not None)
             if e_match: break
 
+    # test group and submitter selections
+    if (args.group_negotiated is not None) and (current_group != "") and re.search(args.group_negotiated, current_group):
+        group_negotiated_match = True
+    if (args.submitter_negotiated is not None) and (current_submitter != "") and re.search(args.submitter_negotiated, current_submitter):
+        submitter_negotiated_match = True
+
     if end_cycle:
         in_cycle = False
         end_cycle = False
         # test whether cycle matched all conditions
-        cycle_match = e_match and since_match and until_match
+        cycle_match = e_match and since_match and until_match and group_negotiated_match and submitter_negotiated_match
         # only save cycles that matched all the given conditions
         if cycle_match:
             ncfile.close()
