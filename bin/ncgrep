@@ -34,6 +34,8 @@ cycle_failed = False
 until_failed = False
 reuse_ncfile = False
 ncfile = None
+current_group = ""
+current_submitter = ""
 
 for line in args.file:
     # if user specified -until, and we hit a cycle that failed, we can halt
@@ -50,6 +52,8 @@ for line in args.file:
         since_match = (args.since is None)
         until_match = (args.until is None)
         cycle_failed = False
+        current_group = ""
+        current_submitter = ""
     elif "Finished Negotiation" in line:
         end_cycle = True
     
@@ -65,8 +69,23 @@ for line in args.file:
     # save the line to current cycle file
     ncfile.write(line)
 
+    if "BEGIN NEGOTIATION" in line:
+        m = re.search('Group\s+(\S+)', line)
+        if m is not None:
+            current_group = m.group(1)
+            current_submitter = ""
+
+    if (current_group != "") and re.search("Negotiating with.* at ", line):
+        m = re.search('with\s+(\S+@\S+)\s+at', line)
+        if m is not None:
+            current_submitter = m.group(1)
+
+    if "negotiateWithGroup resources used" in line:
+        current_submitter = ""
+        current_group = ""
+
     # timestamp
-    flds = line.strip().split(' ')
+    flds = line.strip().split()
     timestamp = int(time.mktime(time.strptime(' '.join(flds[:tsflds]), args.timestamp_format)))
 
     # test since and until
