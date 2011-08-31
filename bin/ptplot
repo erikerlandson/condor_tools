@@ -59,9 +59,7 @@ if not (args.by_groups or args.by_submitters or args.by_expr):
 
 def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False, ratio_plots=False, rate_plots=False, timeslice=1, ignore=[], only=[], since=None, until=None, submissions=False):
     cum_map = {}
-    cum_map[""] = []
-    first = True
-    t0 = 0
+    cum_map[""] = {}
     cur_ag = ""
     line_num = 0
     for ln in in_file:
@@ -98,32 +96,29 @@ def fill_cum_map(in_file, by_groups=False, by_submitters=False, cum_plots=False,
         if (since != None) and (tcur < since): continue
         if (until != None) and (tcur > until): continue
 
-        # determine zero-time
-        if first:
-            t0 = tcur
-            first = False
-
-        if tcur < t0:
-            sys.stderr.write("Warning: skipping out-of-order timestamp line %d of input:\n" % (line_num))
-            sys.stderr.write("%s\n" % (raw_ln))
-            continue
-
-        # translate time stamps to zero-based from t0
-        tcur -= t0
+        # translate time stamps to time slice bins
         tcur /= timeslice
         tcur *= timeslice
 
-        # encountered a new acct grp -- fill in its previous time stamps
-        if (not cum_map.has_key(cur_ag)):
-            cum_map[cur_ag] = [[x[0], 0] for x in cum_map[""]]
+        # encountered a new acct grp
+        if not cum_map.has_key(cur_ag):
+            cum_map[cur_ag] = {}
+            for k in cum_map[""].keys():
+                cum_map[cur_ag][k] = 0
 
         for ag in cum_map.keys():
             if ag in ["", cur_ag]: d = 1
             else: d = 0
-            if (len(cum_map[ag]) > 0) and (cum_map[ag][-1][0] == tcur):
-                cum_map[ag][-1][1] += d
-            else:
-                cum_map[ag].append([tcur, d])
+            if not cum_map[ag].has_key(tcur): cum_map[ag][tcur] = 0
+            cum_map[ag][tcur] += d
+
+    # convert to arrays
+    # while we're at it translate to zero-based times
+    ts = cum_map[""].keys()
+    ts.sort()
+    t0 = ts[0]
+    for ag in cum_map.keys():
+        cum_map[ag] = [[t-t0, cum_map[ag][t]] for t in ts]
 
     # get cum counts
     if cum_plots:
