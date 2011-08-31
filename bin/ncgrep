@@ -150,6 +150,7 @@ for line in args.file:
             group_rejected_match and submitter_rejected_match
         # only save cycles that matched all the given conditions
         if cycle_match:
+            ncfile.truncate()
             ncfile.close()
             matching_files.append(ncfilename)
             reuse_ncfile = False
@@ -176,6 +177,9 @@ for fname in onames:
     f = open(fname, "r")
     for ln in f: args.ofile.write(ln)
     f.close()
+
+# remove all matching files after we are finished with them
+for fname in matching_files:
     os.remove(fname)
 
 # clean up dangling temp file
