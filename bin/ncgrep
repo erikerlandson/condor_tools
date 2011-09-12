@@ -11,20 +11,43 @@ import argparse_extensions
 
 # set up command line args
 argparser = argparse.ArgumentParser()
-argparser.add_argument('file', nargs='?', type=argparse.FileType('r'), default=sys.stdin, metavar='<filename>', help='def= stdin')
-argparser.add_argument('-ofile', type=argparse.FileType('w'), default=sys.stdout, metavar='<outputfile>', help='def= stdout')
-argparser.add_argument('-first', nargs='?', type=int, default=0, const=1, metavar='<N>', help='select first N matching cycles: N def= 1')
-argparser.add_argument('-last', nargs='?', type=int, default=0, const=1, metavar='<N>', help='select last N matching cycles:  N def= 1')
-argparser.add_argument('-e', default=[], action='append', metavar='<regexp>', help='select cycles with >= 1 line matching regexp (like grep -e)')
-argparser.add_argument('-since', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='select cycles since given time. ex: "1294696760", "10 min ago", "1h", "2010/12/31", "2010/12/31 15:30:00"')
-argparser.add_argument('-until', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='select cycles until given time.  see -since')
-argparser.add_argument('-group-negotiated', metavar='<regexp>', help='select cycles when group matching <regexp> negotiated')
-argparser.add_argument('-submitter-negotiated', metavar='<regexp>', help='select cycles when submitter matching <regexp> negotiated')
-argparser.add_argument('-group-matched', metavar='<regexp>', help='select cycles when group matching <regexp> matched a job')
-argparser.add_argument('-submitter-matched', metavar='<regexp>', help='select cycles when submitter matching <regexp> matched a job')
-argparser.add_argument('-group-rejected', metavar='<regexp>', help='select cycles when group matching <regexp> was rejected')
-argparser.add_argument('-submitter-rejected', metavar='<regexp>', help='select cycles when submitter matching <regexp> was rejected')
-argparser.add_argument('-timestamp-format', default="%m/%d/%y %H:%M:%S", metavar='<fmt>', help='log timestamp format: def="%%m/%%d/%%y %%H:%%M:%%S"')
+grp = argparser.add_argument_group('I/O')
+grp.add_argument('file', nargs='?', type=argparse.FileType('r'), default=sys.stdin, metavar='<filename>', help='def= stdin')
+grp.add_argument('-ofile', type=argparse.FileType('w'), default=sys.stdout, metavar='<outputfile>', help='def= stdout')
+
+grp = argparser.add_argument_group('First/Last Subsets')
+grp.add_argument('-first', nargs='?', type=int, default=0, const=1, metavar='<N>', help='select first N matching cycles: N def= 1')
+grp.add_argument('-last', nargs='?', type=int, default=0, const=1, metavar='<N>', help='select last N matching cycles:  N def= 1')
+
+grp = argparser.add_argument_group('Regular Expressions')
+grp.add_argument('-e', default=[], action='append', metavar='<regexp>', help='select cycles with >= 1 line matching regexp (like grep -e)')
+
+grp = argparser.add_argument_group('Time Selection')
+grp.add_argument('-since', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='select cycles since given time. ex: "1294696760", "10 min ago", "1h", "2010/12/31", "2010/12/31 15:30:00"')
+grp.add_argument('-until', type=argparse_extensions.time_spec, default=None, metavar='<time-expr>', help='select cycles until given time.  see -since')
+
+grp = argparser.add_argument_group('Accounting Groups')
+grp.add_argument('-group-negotiated', metavar='<regexp>', help='select cycles when group matching <regexp> negotiated')
+grp.add_argument('-group-matched', metavar='<regexp>', help='select cycles when group matching <regexp> matched a job')
+grp.add_argument('-group-rejected', metavar='<regexp>', help='select cycles when group matching <regexp> was rejected')
+
+grp = argparser.add_argument_group('Submitters')
+grp.add_argument('-submitter-negotiated', metavar='<regexp>', help='select cycles when submitter matching <regexp> negotiated')
+grp.add_argument('-submitter-matched', metavar='<regexp>', help='select cycles when submitter matching <regexp> matched a job')
+grp.add_argument('-submitter-rejected', metavar='<regexp>', help='select cycles when submitter matching <regexp> was rejected')
+
+grp = argparser.add_argument_group('Job Clusters')
+grp.add_argument('-cluster-negotiated', type=int, metavar='<N>', help='select cycles when cluster <N> negotiated')
+grp.add_argument('-cluster-matched', type=int, metavar='<N>', help='select cycles when cluster <N> matched')
+grp.add_argument('-cluster-rejected', type=int, metavar='<N>', help='select cycles when cluster <N> was rejected')
+
+grp = argparser.add_argument_group('Job IDs')
+grp.add_argument('-job-negotiated', type=argparse_extensions.job_id, metavar='<N.M>', help='select cycles when job <N.M> negotiated')
+grp.add_argument('-job-matched', type=argparse_extensions.job_id, metavar='<N.M>', help='select cycles when job <N.M> matched')
+grp.add_argument('-job-rejected', type=argparse_extensions.job_id, metavar='<N.M>', help='select cycles when job <N.M> was rejected')
+
+grp = argparser.add_argument_group('Formats')
+grp.add_argument('-timestamp-format', default="%m/%d/%y %H:%M:%S", metavar='<fmt>', help='log timestamp format: def="%%m/%%d/%%y %%H:%%M:%%S"')
 
 # parse command line
 args = argparser.parse_args()
@@ -51,14 +74,25 @@ for line in args.file:
             ncfile = open(ncfilename, "w")
         cycle_lines = 0
         e_match = (len(args.e) <= 0)
+
         since_match = (args.since is None)
         until_match = (args.until is None)
+
         group_negotiated_match = (args.group_negotiated is None)
         submitter_negotiated_match = (args.submitter_negotiated is None)
+        cluster_negotiated_match = (args.cluster_negotiated is None)
+        job_negotiated_match = (args.job_negotiated is None)
+
         group_matched_match = (args.group_matched is None)
         submitter_matched_match = (args.submitter_matched is None)
+        cluster_matched_match = (args.cluster_matched is None)
+        job_matched_match = (args.job_matched is None)
+
         group_rejected_match = (args.group_rejected is None)
         submitter_rejected_match = (args.submitter_rejected is None)
+        cluster_rejected_match = (args.cluster_rejected is None)
+        job_rejected_match = (args.job_rejected is None)
+
         cycle_failed = False
         current_group = ""
         current_submitter = ""
@@ -93,7 +127,7 @@ for line in args.file:
             cycle_failed = not until_match
 
     # test '-e' patterns
-    if not e_match and (len(args.e) > 0):
+    if not e_match:
         for regexp in args.e:
             e_match = (re.search(regexp, line) is not None)
             if e_match: break
@@ -117,25 +151,52 @@ for line in args.file:
         current_group = ""
 
     # test group and submitter selections
-    if (args.group_negotiated is not None) and (current_group != "") and re.search(args.group_negotiated, current_group):
+    if (not group_negotiated_match) and (current_group != "") and re.search(args.group_negotiated, current_group):
         group_negotiated_match = True
-    if (args.submitter_negotiated is not None) and (current_submitter != "") and re.search(args.submitter_negotiated, current_submitter):
+    if (not submitter_negotiated_match) and (current_submitter != "") and re.search(args.submitter_negotiated, current_submitter):
         submitter_negotiated_match = True
 
-    if (args.group_matched is not None) and (current_group != "") and re.search(args.group_matched, current_group) and \
+    if (not group_matched_match) and (current_group != "") and re.search(args.group_matched, current_group) and \
             ('Successfully matched with' in line):
         group_matched_match = True
-    if (args.submitter_matched is not None) and (current_submitter != "") and re.search(args.submitter_matched, current_submitter) and \
+    if (not submitter_matched_match) and (current_submitter != "") and re.search(args.submitter_matched, current_submitter) and \
             ('Successfully matched with' in line):
         submitter_matched_match = True
 
-    if (args.group_rejected is not None) and (current_group != "") and re.search(args.group_rejected, current_group) and \
+    if (not group_rejected_match) and (current_group != "") and re.search(args.group_rejected, current_group) and \
             re.search('Rejected.*no match found', line):
         group_rejected_match = True
-    if (args.submitter_rejected is not None) and (current_submitter != "") and re.search(args.submitter_rejected, current_submitter) and \
+    if (not submitter_rejected_match) and (current_submitter != "") and re.search(args.submitter_rejected, current_submitter) and \
             re.search('Rejected.*no match found', line):
         submitter_rejected_match = True
 
+    # test cluster and job related selections
+    if not cluster_negotiated_match:
+        m = re.search('Request (\d+)\.\d+:', line)
+        if (m is not None) and (int(m.group(1)) == args.cluster_negotiated):
+            cluster_negotiated_match = True
+    if not job_negotiated_match:
+        m = re.search('Request (\d+)\.(\d+):', line)
+        if (m is not None) and ((int(m.group(1)),int(m.group(2))) == args.job_negotiated):
+            job_negotiated_match = True
+
+    if not cluster_matched_match:
+        m = re.search('Matched (\d+)\.\d+ ', line)
+        if (m is not None) and (int(m.group(1)) == args.cluster_matched):
+            cluster_matched_match = True
+    if not job_matched_match:
+        m = re.search('Matched (\d+)\.(\d+) ', line)
+        if (m is not None) and ((int(m.group(1)),int(m.group(2))) == args.job_matched):
+            job_matched_match = True
+
+    if not cluster_rejected_match:
+        m = re.search('Rejected (\d+)\.\d+ ', line)
+        if (m is not None) and (int(m.group(1)) == args.cluster_rejected):
+            cluster_rejected_match = True
+    if not job_rejected_match:
+        m = re.search('Rejected (\d+)\.(\d+) ', line)
+        if (m is not None) and ((int(m.group(1)),int(m.group(2))) == args.job_rejected):
+            job_rejected_match = True
 
     if end_cycle:
         in_cycle = False
@@ -144,7 +205,10 @@ for line in args.file:
         cycle_match = e_match and since_match and until_match and \
             group_negotiated_match and submitter_negotiated_match and \
             group_matched_match and submitter_matched_match and \
-            group_rejected_match and submitter_rejected_match
+            group_rejected_match and submitter_rejected_match and \
+            cluster_negotiated_match and job_negotiated_match and \
+            cluster_matched_match and job_matched_match and \
+            cluster_rejected_match and job_rejected_match
         # only save cycles that matched all the given conditions
         if cycle_match:
             ncfile.truncate()

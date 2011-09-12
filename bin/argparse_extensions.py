@@ -5,9 +5,23 @@ import time, datetime
 import argparse
 
 
+def job_id(arg):
+    emsg = "Invalid job-id value: '%s\'" % (arg)
+    vl = arg.strip().split('.')
+    if len(vl) != 2: raise argparse.ArgumentTypeError(emsg)
+    try:
+       clust = int(vl[0])
+       proc = int(vl[1])
+    except:
+       raise argparse.ArgumentTypeError(emsg)
+    return (clust, proc)
+
+
 def time_spec(arg):
     t0 = int(time.time())
     date0 = time.strftime("%Y/%m/%d")
+
+    emsg = "Unrecognized time spec value: '%s'" % (arg)
 
     vl = arg.strip().split()
 
