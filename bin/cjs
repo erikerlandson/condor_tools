@@ -28,7 +28,8 @@ argparser.add_argument('-vs', action='store_true', default=False, help='verbose 
 argparser.add_argument('-ss', dest='ss', action='store_true', default=False, help='submit in steady-state mode')
 argparser.add_argument('-ss-maxreps', dest='maxreps', default=None, type=int, metavar='<reps>')
 argparser.add_argument('-ss-maxtime', dest='maxtime', default=None, type=float, metavar='<seconds>')
-argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>')
+argparser.add_argument('-ss-interval', dest='interval', default=0, type=float, metavar='<seconds>', help='submit interval, def=0 (fast as possible)')
+argparser.add_argument('-ss-maxinterval', dest='maxinterval', default=None, type=float, metavar='<seconds>', help='maximum submit interval (range)')
 argparser.add_argument('-dir', default=None, metavar='<directory>', help='place working data/dirs in <directory>')
 
 args = argparser.parse_args()
@@ -185,6 +186,7 @@ else:
     tL = t0
     elapsed = 0.0
     ssub = 0
+    I = args.interval
     while True:
         rc = subprocess.call(subcmd)
         tt = time.time()
@@ -205,7 +207,10 @@ else:
         if (args.maxreps != None) and (reps >= args.maxreps): break
         if (args.maxtime != None) and (elapsed >= args.maxtime): break
 
+        if args.maxinterval is not None: I = random.uniform(args.interval, args.maxinterval)
+
         tC = float(time.time())
-        tS = args.interval - (tC-tL)
+        tS = I - (tC-tL)
+
         if tS > 0: time.sleep(tS)
         tL = float(time.time())
