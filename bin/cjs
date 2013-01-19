@@ -129,10 +129,17 @@ if xsubmitters != None:
 elif xgroups != None:
     # construct using the groups and counts given in '-xgroups'
     nsub = 0
+    k3 = 0
     for k in xgroups.keys():
         gn = xgroups[k]
-        jsfile.write("+AccountingGroup=\"%s.user\"\n" % (k))
-        jsfile.write("queue %d\n" % (gn))
+        if args.submitters <= 1:
+            jsfile.write("+AccountingGroup=\"%s.user\"\n" % (k))
+            jsfile.write("queue %d\n" % (gn))
+        else:
+            for kk in xrange(gn):
+                jsfile.write("+AccountingGroup=\"%s.user%04d\"\n" % (k, k3 % args.submitters))
+                jsfile.write("queue\n")
+                k3 += 1
         nsub += gn
 else:
     # construct using (n) and (submitters)
