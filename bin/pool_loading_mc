@@ -1,0 +1,69 @@
+#!/bin/env ruby
+
+
+require 'trollop'
+require 'simple-random'
+
+
+class Distribution
+    def initialize
+        @rng = SimpleRandom.new
+        @rng.set_seed(Time.now)
+    end
+
+    def sample(*n)
+        case
+        when n.length < 1
+            return _sample
+        when (n.length == 1 and n[0].class <= Integer)
+            r = []
+            n[0].times { r << _sample }
+            return r
+        else
+            raise "bad args"
+        end
+    end
+end
+
+class GaussianDist < Distribution
+    def initialize(mean, stdv)
+        @mean = mean
+        @stdv = stdv
+        super()
+    end
+    def _sample
+        return @rng.normal(@mean, @stdv)
+    end
+end
+
+class UniformDist < Distribution
+    def initialize(mean, stdv)
+        @a = mean - stdv*1.732050808
+        @b = mean + stdv*1.732050808
+        super()
+    end
+    def _sample
+        return @rng.uniform(@a, @b)
+    end
+end
+
+
+opts = Trollop::options do
+    opt :trials, "number of trials", :default => 1000
+    opt :mean, "random variable mean", :default => 0.0
+    opt :stdv, "random variable standard deviation", :default => 1.0
+    opt :distribution, "random variable distribution", :default => "gaussian"
+end
+
+
+case opts[:distribution].downcase
+when "gaussian", "normal"
+    rv = GaussianDist.new(opts[:mean], opts[:stdv])
+when "uniform"
+    rv = UniformDist.new(opts[:mean], opts[:stdv])
+else
+    Trollop::die(:distribution, "  Invalid distribution value %s" % [opts[:distribution]])
+end
+
+
+print "%s %s\n" % [rv.sample, rv.sample(10)]
