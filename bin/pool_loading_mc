@@ -1,8 +1,13 @@
 #!/bin/env ruby
 
-
+# gem install trollop
 require 'trollop'
+
+# gem install simple-random
 require 'simple-random'
+
+# gem install narray
+require 'narray'
 
 
 class Distribution
@@ -38,8 +43,9 @@ end
 
 class UniformDist < Distribution
     def initialize(mean, stdv)
-        @a = mean - stdv*1.732050808
-        @b = mean + stdv*1.732050808
+        # http://en.wikipedia.org/wiki/Uniform_distribution_%28continuous%29
+        @a = mean - stdv*Math.sqrt(3.0)
+        @b = mean + stdv*Math.sqrt(3.0)
         super()
     end
     def _sample
@@ -47,23 +53,50 @@ class UniformDist < Distribution
     end
 end
 
+class LogNormal < Distribution
+    def initialize(mean, stdv)
+        # http://en.wikipedia.org/wiki/Log-normal_distribution
+        @sigma = Math.sqrt(Math.log(1.0 + (stdv**2 / (mean**2))))
+        @mu = Math.log(mean) - 0.5*@sigma**2
+        super()
+    end
+    def _sample
+        return @rng.log_normal(@mu, @sigma)
+    end
+end
+
+
+def random_variable(distribution, mean, stdv)
+    case distribution.downcase
+        when "gaussian", "normal"
+            rv = GaussianDist.new(mean, stdv)
+        when "uniform"
+            rv = UniformDist.new(mean, stdv)
+        when "lognormal", "log-normal", "log_normal"
+            rv = LogNormal.new(mean, stdv)
+        else
+            Trollop::die(:distribution, "  Invalid distribution value %s" % [opts[distribution]])
+    end
+    return rv
+end
+
 
 opts = Trollop::options do
-    opt :trials, "number of trials", :default => 1000
-    opt :mean, "random variable mean", :default => 0.0
-    opt :stdv, "random variable standard deviation", :default => 1.0
-    opt :distribution, "random variable distribution", :default => "gaussian"
+    opt :distribution, "random variable distribution", :type => :string, :required => true
+    opt :trials, "number of trials", :type => :int, :required => true
+    opt :mean, "random variable mean", :type => :floats, :required => true
+    opt :stdv, "random variable standard deviation", :type => :floats, :required => true
+    opt :period, "negotiator cycle period", :type => :ints, :required => true
 end
 
 
-case opts[:distribution].downcase
-when "gaussian", "normal"
-    rv = GaussianDist.new(opts[:mean], opts[:stdv])
-when "uniform"
-    rv = UniformDist.new(opts[:mean], opts[:stdv])
-else
-    Trollop::die(:distribution, "  Invalid distribution value %s" % [opts[:distribution]])
+print "mean\tstdv\tperiod\tmod_mean\tmod_stdv\n"
+opts[:mean].each do |mean|
+    opts[:stdv].each do |stdv|
+        opts[:period].each do |period|
+            rv = random_variable(opts[:distribution], mean, stdv)
+            data = NArray.to_na(rv.sample(opts[:trials])) % period
+            print "%s\t%s\t%s\t%s\t%s\n" % [mean, stdv, period, data.mean, data.stddev]
+        end
+    end
 end
-
-
-print "%s %s\n" % [rv.sample, rv.sample(10)]
