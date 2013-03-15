@@ -1,0 +1,77 @@
+#!/bin/env ruby
+
+$LOAD_PATH.unshift("/home/eje/git/capricious/lib")
+
+#require 'ruby-prof'
+require 'trollop'
+require 'capricious'
+
+#RubyProf.start
+
+opts = Trollop::options do
+    opt :samples, "number of random samples from each rv", :default => 10000
+    opt :mean, "distribution mean", :type => :floats, :default => [0.5]
+    opt :stdv, "distribution stdv", :type => :floats, :default => [1.0]
+    opt :xn, "number of points to plot", :default => 100
+    opt :xmin, "x min for plotting points", :default => -3.0
+    opt :xmax, "x max for plotting", :default => 3.0
+    opt :modulus, "modulus to test", :default => 1.0
+    opt :distribution, "normal | lognormal | exponential", :default => "normal"
+end
+
+headers = []
+data = []
+
+xdata = []
+h = opts[:xmax].to_f - opts[:xmin].to_f
+n = opts[:xn]
+0.upto(n) do |j|
+    xdata << opts[:xmin] + (h * j.to_f / n.to_f)
+end
+
+headers << "x"
+data << xdata
+
+opts[:mean].each do |mean|
+    opts[:stdv].each do |stdv|
+        case opts[:distribution]
+            when "normal"
+                rv = Capricious::Normal.new(mean, stdv**2)
+            when "lognormal"
+                rv = Capricious::LogNormal.new(mean,  stdv**2)
+            when "exponential"
+                rv = Capricious::Exponential.new(1.0/stdv)
+            else
+                raise ArgumentError, "bad! bad distribution!"
+        end
+        de = Capricious::SplineDistribution.new(:cdf_quantile => 1.0/99.0, :cdf_smooth_lb => false, :cdf_smooth_ub => false)
+        demod = Capricious::SplineDistribution.new(:cdf_quantile => 1.0/99.0, :cdf_smooth_lb => false, :cdf_smooth_ub => false)
+        opts[:samples].times do
+            x = rv.next
+            de << x
+            demod << x % opts[:modulus]
+        end
+        de.recompute
+        de.clear_data
+        demod.recompute
+        demod.clear_data
+        # $stderr.puts(de.spline.inspect)
+        y = []
+        ymod = []
+        xdata.each do |x|
+            y << de.pdf(x)
+            ymod << demod.pdf(x)
+        end
+        headers << "m=%4.2f_s=%4.2f" % [mean, stdv]
+        data << y
+        headers << "m=%4.2f_s=%4.2f_mod_%4.2f" % [mean, stdv, opts[:modulus]]
+        data << ymod
+    end
+end
+
+print headers.join("\t") + "\n"
+data.transpose.each do |v|
+    print v.join("\t") + "\n"
+end
+
+#RubyProf::FlatPrinter.new(RubyProf.stop).print(File.open('profile.txt', 'w'))
