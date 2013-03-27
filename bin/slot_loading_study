@@ -1,0 +1,30 @@
+#!/bin/env ruby
+
+require 'trollop'
+
+data = []
+
+def load_factor(dur, cadence)
+  q,r = dur.divmod(cadence)
+  r /= cadence.to_f
+  z = (q+r.ceil)*cadence
+  dur.to_f / z
+end
+
+step = 0.05
+cadence = 1.0
+intervals = 10
+
+
+(step).step(cadence*intervals-0.000001, step) do |dur|
+  data << [dur, load_factor(dur, cadence)]
+end
+
+headers = ["duration", "load-factor"]
+
+print headers.join("\t") + "\n"
+data.each do |v|
+  print v.join("\t") + "\n"
+end
+
+
