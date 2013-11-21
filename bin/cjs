@@ -133,11 +133,14 @@ elif xgroups != None:
     for k in xgroups.keys():
         gn = xgroups[k]
         if args.submitters <= 1:
-            jsfile.write("+AccountingGroup=\"%s.user\"\n" % (k))
+            jsfile.write("accounting_group = %s\n" % (k))
+#            jsfile.write("+AccountingGroup=\"%s.user\"\n" % (k))
             jsfile.write("queue %d\n" % (gn))
         else:
             for kk in xrange(gn):
-                jsfile.write("+AccountingGroup=\"%s.user%04d\"\n" % (k, k3 % args.submitters))
+                jsfile.write("accounting_group = %s\n" % (k))
+                jsfile.write("accounting_group_user = user%04d\n" % (k3 % args.submitters))
+#                jsfile.write("+AccountingGroup=\"%s.user%04d\"\n" % (k, k3 % args.submitters))
                 jsfile.write("queue\n")
                 k3 += 1
         nsub += gn
@@ -162,7 +165,9 @@ else:
             u += d
             u_cnt += d
 
-        jsfile.write("+AccountingGroup = \"%s\"\n" % ("none.user%04d" % j))
+        jsfile.write("accounting_group = none\n")
+        jsfile.write("accounting_group_user = user%04d\n" % (j))
+#        jsfile.write("+AccountingGroup = \"%s\"\n" % ("none.user%04d" % j))
         jsfile.write("queue %d\n" % (u))
         j += 1
     nsub = u_cnt
