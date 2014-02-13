@@ -1,0 +1,5 @@
+#!/bin/env bash
+
+ddir=`condor_config_val LOG` && file $ddir  &&  cd $ddir  &&  rm -rf * 
+ddir=`condor_config_val SPOOL` && file $ddir  &&  cd $ddir  &&  rm -rf *
+ddir=`condor_config_val EXECUTE` && file $ddir  &&  cd $ddir  &&  rm -rf *
